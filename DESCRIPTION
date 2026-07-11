@@ -5,7 +5,7 @@ Version: 1.2.0
 Authors@R: person("L.", "Zhang", email = "zhanglingfeng@whu.edu.cn", role = c("aut", "cre"))
 Author: L. Zhang
 Maintainer: L. Zhang <zhanglingfeng@whu.edu.cn>
-Description: Helpers to query DGIdb for gene sets (group or subtype) and write aggregated drug interaction tables.
+Description: Statistically grounded drug prioritisation from gene sets. Queries DGIdb via GraphQL and ranks drugs by hypergeometric enrichment with FDR correction — not by naïve hit counting.
 License: MIT
 Encoding: UTF-8
 LazyData: true
