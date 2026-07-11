@@ -1,0 +1,86 @@
+* using log directory ‘/Users/lfzhang/Documents/Code/DGIdbr/..Rcheck’
+* using R version 4.4.3 (2025-02-28)
+* using platform: aarch64-apple-darwin20.0.0
+* R was compiled by
+    clang version 18.1.8
+    GNU Fortran (GCC) 13.3.0
+* running under: macOS 26.5.1
+* using session charset: UTF-8
+* using option ‘--no-manual’
+* checking for file ‘./DESCRIPTION’ ... OK
+* checking extension type ... Package
+* this is package ‘DGIdbr’ version ‘1.1.0’
+* package encoding: UTF-8
+* checking package namespace information ... OK
+* checking package dependencies ... OK
+* checking if this is a source package ... OK
+* checking if there is a namespace ... OK
+* checking for executable files ... OK
+* checking for hidden files and directories ... NOTE
+Found the following hidden files and directories:
+  .DS_Store
+  .gitattributes
+  dgidb_group_out/.DS_Store
+  dgidb_group_out/dgidb_group/.DS_Store
+  dgidb_subtype_out/.DS_Store
+  dgidb_subtype_out/dgidb_subtype/.DS_Store
+  dgidb_subtype_out/dgidb_subtype/1/.DS_Store
+  ..Rcheck
+  .git
+These were most likely included in error. See section ‘Package
+structure’ in the ‘Writing R Extensions’ manual.
+* checking for portable file names ... OK
+* checking for sufficient/correct file permissions ... OK
+* checking whether package ‘DGIdbr’ can be installed ... OK
+* checking installed package size ... OK
+* checking package directory ... OK
+* checking DESCRIPTION meta-information ... NOTE
+License components which are templates and need '+ file LICENSE':
+  MIT
+Checking should be performed on sources prepared by ‘R CMD build’.
+* checking top-level files ... NOTE
+File
+  LICENSE
+is not mentioned in the DESCRIPTION file.
+* checking for left-over files ... OK
+* checking index information ... OK
+* checking package subdirectories ... WARNING
+Found the following directory with the name of a check directory:
+  ./..Rcheck
+Most likely, these were included erroneously.
+* checking code files for non-ASCII characters ... OK
+* checking R files for syntax errors ... OK
+* checking whether the package can be loaded ... OK
+* checking whether the package can be loaded with stated dependencies ... OK
+* checking whether the package can be unloaded cleanly ... OK
+* checking whether the namespace can be loaded with stated dependencies ... OK
+* checking whether the namespace can be unloaded cleanly ... OK
+* checking dependencies in R code ... OK
+* checking S3 generic/method consistency ... OK
+* checking replacement functions ... OK
+* checking foreign function calls ... OK
+* checking R code for possible problems ... NOTE
+build_gene_sets: no visible global function definition for ‘read.csv’
+read_genes_with_dir: no visible global function definition for
+  ‘read.csv’
+run_gene_set: no visible global function definition for ‘aggregate’
+run_gene_set: no visible global function definition for ‘write.csv’
+Undefined global functions or variables:
+  aggregate read.csv write.csv
+Consider adding
+  importFrom("stats", "aggregate")
+  importFrom("utils", "read.csv", "write.csv")
+to your NAMESPACE file.
+* checking Rd files ... OK
+* checking Rd metadata ... OK
+* checking Rd cross-references ... OK
+* checking for missing documentation entries ... OK
+* checking for code/documentation mismatches ... OK
+* checking Rd \usage sections ... OK
+* checking Rd contents ... OK
+* checking for unstated dependencies in examples ... OK
+* checking LazyData ... NOTE
+  'LazyData' is specified without a 'data' directory
+* checking examples ... OK
+* DONE
+Status: 1 WARNING, 5 NOTEs

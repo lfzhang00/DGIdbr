@@ -1,0 +1,5 @@
+build_gene_sets         Build gene sets for a chosen mode
+DGIdbr                  Main entry point for DGIdbr package
+endpoint                DGIdb GraphQL endpoint
+run_gene_set            Run DGIdb query for one gene set and write CSV
+                        outputs

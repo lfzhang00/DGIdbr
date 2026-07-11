@@ -4,7 +4,12 @@
 \alias{run_gene_set}
 \title{Run DGIdb query for one gene set and write CSV outputs}
 \usage{
-run_gene_set(label, genes, out_dir, approve = TRUE)
+run_gene_set(
+  label, genes, out_dir,
+  approve = TRUE,
+  enrichment = TRUE,
+  background_N = NULL
+)
 }
 \arguments{
 \item{label}{Label for the gene set (used in logs/output paths)}
@@ -14,9 +19,19 @@ run_gene_set(label, genes, out_dir, approve = TRUE)
 \item{out_dir}{Output directory; created if missing}
 
 \item{approve}{Logical; if TRUE keep only FDA approved drugs; if FALSE keep all.}
+
+\item{enrichment}{Logical; if TRUE compute hypergeometric enrichment
+p-values and FDR for each drug. Requires additional API calls.
+Default TRUE.}
+
+\item{background_N}{Integer or NULL; number of background genes for
+hypergeometric test. If NULL (default), automatically queries DGIdb
+for the total druggable gene count. Set a number to override.}
 }
 \value{
-Invisibly returns NULL; writes \code{dgidb_hits.csv} and \code{dgidb_raw.csv}
+Invisibly returns NULL; writes \code{dgidb_hits.csv} (with enrichment
+columns when \code{enrichment = TRUE}: \code{enrichment_ratio}, \code{p_value},
+\code{fdr}, \code{significance}) and \code{dgidb_raw.csv}.
 }
 \description{
 Run DGIdb query for one gene set and write CSV outputs

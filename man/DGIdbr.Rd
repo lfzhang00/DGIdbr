@@ -10,7 +10,9 @@ DGIdbr(
   base_out = file.path("results", "nsNMF", "drug", "Tables"),
   group_filename = "group.csv",
   subtype_filename = "subtype.csv",
-  approve = TRUE
+  approve = TRUE,
+  enrichment = TRUE,
+  background_N = NULL
 )
 }
 \arguments{
@@ -25,6 +27,13 @@ DGIdbr(
 \item{subtype_filename}{Subtype file name (default subtype.csv)}
 
 \item{approve}{Logical; if TRUE keep only FDA approved drugs. If FALSE, keep all.}
+
+\item{enrichment}{Logical; if TRUE compute hypergeometric enrichment
+p-values and FDR for each drug. Default TRUE.}
+
+\item{background_N}{Integer or NULL; number of background genes for
+hypergeometric test. If NULL (default), automatically queries DGIdb
+for the total druggable gene count. Set a number to override.}
 }
 \value{
 Invisibly returns NULL

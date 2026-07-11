@@ -4,7 +4,8 @@
 \alias{run_gene_sets}
 \title{Run a list of gene sets}
 \usage{
-run_gene_sets(gene_sets, approve = TRUE)
+run_gene_sets(gene_sets, approve = TRUE, enrichment = TRUE,
+  background_N = NULL)
 }
 \description{
 Run a list of gene sets

@@ -82,9 +82,15 @@ print_result <- function(title, res, node_path) {
 #' @param genes Character vector of gene symbols
 #' @param out_dir Output directory; created if missing
 #' @param approve Logical; if TRUE keep only FDA approved drugs; if FALSE keep all.
+#' @param enrichment Logical; if TRUE compute hypergeometric enrichment
+#'   p-values and FDR. Requires additional API calls per drug. Default TRUE.
+#' @param background_N Integer or NULL; number of background genes for
+#'   hypergeometric test. If NULL (default), automatically queries DGIdb
+#'   for the total druggable gene count (~11665). Set a number to override.
 #' @return Invisibly returns NULL; writes `dgidb_hits.csv` and `dgidb_raw.csv`
 #' @export
-run_gene_set <- function(label, genes, out_dir, approve = TRUE) {
+run_gene_set <- function(label, genes, out_dir, approve = TRUE,
+                         enrichment = TRUE, background_N = NULL) {
   genes <- unique(genes[!is.na(genes) & nzchar(genes)])
   if (length(genes) == 0) {
     cat(label, ": no genes, skipped.\n\n")
@@ -228,7 +234,25 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE) {
     agg <- agg[approved_rows, ]
     cat(label, ": Filtered to approved drugs only. Remaining:", nrow(agg), "\n")
   }
-  agg <- agg[order(-agg$gene_count, -agg$total_score, -agg$max_score), ]
+
+  # ---- Enrichment analysis ----
+  if (isTRUE(enrichment) && nrow(agg) > 0) {
+    cat("\n", label, ": Computing enrichment statistics...\n")
+    drugs_to_query <- unique(agg$drug)
+    tgt <- fetch_drug_target_counts(drugs_to_query)
+    if (!is.null(tgt)) {
+      agg <- merge(agg, tgt, by = c("drug", "drug_concept_id"), all.x = TRUE, sort = FALSE)
+      agg <- compute_drug_enrichment(agg, n_genes_input = length(genes), background_N = background_N)
+      # Sort by FDR ascending, then enrichment_ratio descending
+      agg <- agg[order(agg$fdr, -agg$enrichment_ratio, na.last = TRUE), ]
+      cat("Enrichment done. Drugs with FDR < 0.05:", sum(agg$fdr < 0.05, na.rm = TRUE), "\n")
+    } else {
+      cat("Enrichment skipped (could not fetch drug target counts).\n")
+      agg <- agg[order(-agg$gene_count, -agg$total_score, -agg$max_score), ]
+    }
+  } else {
+    agg <- agg[order(-agg$gene_count, -agg$total_score, -agg$max_score), ]
+  }
 
   dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
   out_file <- file.path(out_dir, "dgidb_hits.csv")
@@ -238,8 +262,16 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE) {
 
   cat("==", label, "aggregated drug hits ==\n")
   cat("Total candidate drugs:", nrow(agg), "\n")
-  cat("Top 10 by gene_count/score:\n")
-  print(utils::head(agg[, c("drug", "gene_count", "total_score", "max_score")], 10))
+  if (isTRUE(enrichment) && "fdr" %in% names(agg)) {
+    cat("Top 10 by FDR / enrichment:\n")
+    cols <- intersect(c("drug", "gene_count", "total_targets",
+                        "enrichment_ratio", "p_value", "fdr", "significance"),
+                      names(agg))
+    print(utils::head(agg[, cols], 10))
+  } else {
+    cat("Top 10 by gene_count/score:\n")
+    print(utils::head(agg[, c("drug", "gene_count", "total_score", "max_score")], 10))
+  }
   cat("\nFiles written to:\n -", out_file, "\n -", out_raw, "\n\n")
 }
 
@@ -335,9 +367,11 @@ build_gene_sets <- function(mode = c("group", "subtype"),
 
 #' Run a list of gene sets
 #' @keywords internal
-run_gene_sets <- function(gene_sets, approve = TRUE) {
+run_gene_sets <- function(gene_sets, approve = TRUE, enrichment = TRUE, background_N = NULL) {
   for (gs in gene_sets) {
-    run_gene_set(gs$label, gs$genes, gs$out, approve = approve)
+    run_gene_set(gs$label, gs$genes, gs$out,
+                 approve = approve, enrichment = enrichment,
+                 background_N = background_N)
   }
 }
 
@@ -349,6 +383,10 @@ run_gene_sets <- function(gene_sets, approve = TRUE) {
 #' @param group_filename Group file name (default group.csv)
 #' @param subtype_filename Subtype file name (default subtype.csv)
 #' @param approve Logical; if TRUE keep only FDA approved drugs. If FALSE, keep all.
+#' @param enrichment Logical; if TRUE compute hypergeometric enrichment
+#'   p-values and FDR for each drug. Default TRUE.
+#' @param background_N Integer; number of background genes for
+#'   hypergeometric test (default 20000).
 #' @return Invisibly returns NULL
 #' @export
 #' @name DGIdbr
@@ -361,11 +399,9 @@ DGIdbr <- function(mode = "group",
                    base_out = file.path("results", "nsNMF", "drug", "Tables"),
                    group_filename = "group.csv",
                    subtype_filename = "subtype.csv",
-                   approve = TRUE) {
-  suppressPackageStartupMessages({
-    library(httr)
-    library(jsonlite)
-  })
+                   approve = TRUE,
+                   enrichment = TRUE,
+                   background_N = NULL) {
 
   gs <- build_gene_sets(
     mode = mode,
@@ -378,7 +414,8 @@ DGIdbr <- function(mode = "group",
     cat("No gene sets found in", base_tables, "\n")
     return(invisible(NULL))
   }
-  run_gene_sets(gs, approve = approve)
+  run_gene_sets(gs, approve = approve,
+                enrichment = enrichment, background_N = background_N)
   cat("DGIdb run finished.\n")
   invisible(NULL)
 }

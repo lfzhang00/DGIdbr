@@ -1,0 +1,247 @@
+---
+title: "DGIdbr: Statistical Drug Prioritisation from Gene Sets"
+author: "L. Zhang"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{DGIdbr: Statistical Drug Prioritisation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```r
+library(DGIdbr)
+```
+
+## Why This Package Exists
+
+A common task in translational bioinformatics is: *"I have a list of
+differentially expressed genes — which drugs might be relevant?"*
+
+The naïve approach is to query a drug–gene interaction database, count how
+many of your genes each drug targets, and sort by that count. This is what
+DGIdbr v1.0 did, and it has a fundamental problem:
+
+> **Drugs that target many genes (promiscuous drugs) always rank first,**
+> **regardless of whether the enrichment is statistically meaningful.**
+
+Consider two drugs:
+
+| Drug | Genes it targets (total) | Hits in your gene set |
+|------|-------------------------|----------------------|
+| Drug A | 500 | 20 |
+| Drug B | 30  | 15 |
+
+A naïve count ranks Drug A first (20 > 15). But Drug B hits **50%** of its
+targets in your gene set, while Drug A hits only **4%**. Drug B is far more
+likely to represent a genuine biological signal.
+
+DGIdbr v1.1+ replaces counting with a **hypergeometric enrichment test**
+that answers: *"Is the overlap between this drug's targets and my gene set
+greater than expected by chance?"*
+
+## The Statistical Framework
+
+### Hypergeometric test
+
+For each drug we compute:
+
+$$P(X \geq k) = 1 - \sum_{i=0}^{k-1} \frac{\binom{m}{i}\binom{N-m}{n-i}}{\binom{N}{n}}$$
+
+Where:
+
+| Symbol | Meaning |
+|--------|---------|
+| $k$ | Number of input genes that interact with this drug |
+| $m$ | Total number of genes this drug targets (from DGIdb) |
+| $n$ | Number of genes in your input gene set |
+| $N$ | Background: total druggable genes in DGIdb (~11,665) |
+
+### Enrichment ratio
+
+$$\text{ER} = \frac{k/n}{m/N}$$
+
+- ER > 1 → drug's targets are **over-represented** in your gene set
+- ER < 1 → drug's targets are **under-represented**
+- ER = 1 → exactly what you'd expect by chance
+
+### FDR correction
+
+Raw p-values are adjusted with the Benjamini–Hochberg procedure to control
+the false discovery rate across all tested drugs.
+
+## Quick Start
+
+### Group (case–control) mode
+
+Input CSV must have columns: `gene`, `direction` (up/down).
+
+```r
+DGIdbr(
+  mode       = "group",
+  base_tables = "path/to/tables",
+  group_filename = "group.csv",
+  base_out   = "path/to/output",
+  approve    = TRUE,       # FDA-approved drugs only
+  enrichment = TRUE         # default: hypergeometric test + FDR
+)
+```
+
+### Subtype mode
+
+Input CSV must have columns: `gene`, `direction`, `subtype`.
+
+```r
+DGIdbr(
+  mode       = "subtype",
+  base_tables = "path/to/tables",
+  subtype_filename = "subtype.csv",
+  base_out   = "path/to/output",
+  approve    = TRUE,
+  enrichment  = TRUE
+)
+```
+
+### Backward-compatible mode
+
+```r
+DGIdbr(
+  mode        = "group",
+  enrichment  = FALSE   # original gene_count ranking
+)
+```
+
+## Understanding the Output
+
+The main output file `dgidb_hits.csv` contains these columns:
+
+| Column | Description |
+|--------|-------------|
+| `drug` | Drug name |
+| `gene_count` | How many of your input genes this drug targets |
+| `total_targets` | How many genes this drug targets in total (from DGIdb) |
+| `total_score` | Sum of DGIdb interaction scores |
+| `max_score` | Highest single interaction score |
+| `genes` | Which of your genes interact with this drug |
+| `sources` | Source databases supporting the interactions |
+| `approved` | FDA approval status |
+| `enrichment_ratio` | $(k/n) / (m/N)$ — fold enrichment over random expectation |
+| `p_value` | Raw hypergeometric p-value |
+| `fdr` | Benjamini–Hochberg adjusted p-value |
+| `significance` | `***` < 0.001, `**` < 0.01, `*` < 0.05, `.` < 0.1, `ns` |
+
+### How to filter results
+
+```r
+hits <- read.csv("dgidb_hits.csv")
+
+# Strict: FDR < 0.05 AND enrichment_ratio > 5
+strict <- subset(hits, fdr < 0.05 & enrichment_ratio > 5)
+
+# Exploratory: FDR < 0.1
+exploratory <- subset(hits, fdr < 0.1)
+
+# Top candidates sorted by FDR
+head(hits[order(hits$fdr), c("drug", "gene_count", "total_targets",
+     "enrichment_ratio", "fdr", "significance")], 10)
+```
+
+## Worked Example
+
+We use 9 well-known cancer-related genes to demonstrate the difference
+between counting-based and enrichment-based ranking.
+
+### Without enrichment (v1.0 behaviour)
+
+```r
+# (results shown from a pre-computed run)
+```
+
+| Rank | Drug | gene_count | total_score |
+|------|------|-----------|-------------|
+| 1 | RIBAVIRIN | 3 | 0.137 |
+| 2 | CISPLATIN | 3 | 0.046 |
+| 3 | CARBOPLATIN | 3 | 0.038 |
+| 4 | PACLITAXEL | 3 | 0.020 |
+
+These are all broad-spectrum chemotherapies that interact with hundreds of
+genes. They rank highly simply because they are promiscuous.
+
+### With enrichment (v1.1+, default)
+
+| Rank | Drug | gene_count | total_targets | enrichment_ratio | FDR |
+|------|------|-----------|--------------|-----------------|-----|
+| 1 | CHEMBL1214407 | 2 | 4 | 648.1 | 0.0011 |
+| 2 | CHEMBL587620 | 2 | 5 | 518.4 | 0.0011 |
+| 3 | ONONIN | 2 | 5 | 518.4 | 0.0011 |
+| 4 | RIBAVIRIN | 3 | 37 | 105.1 | 0.0011 |
+
+CHEMBL1214407 (a relatively obscure compound) ranks first because 2 of
+its only 4 known targets appear in our gene set — a 648-fold enrichment
+over random expectation. This is the kind of specific, unexpected finding
+that the enrichment framework is designed to surface.
+
+## Choosing `background_N`
+
+The default (`NULL`) automatically queries DGIdb for the current count of
+druggable genes (~11,665 as of 2025). This is the recommended setting.
+
+You may override it if:
+
+- You want a more conservative test → use larger N (e.g. 20000 for all
+  protein-coding genes)
+- You want to restrict to a specific gene universe → provide your own count
+
+```r
+# More conservative (all protein-coding genes)
+DGIdbr(..., background_N = 20000)
+
+# Auto-detect (recommended)
+DGIdbr(..., background_N = NULL)
+```
+
+## Important Caveats
+
+### 1. Study bias
+
+DGIdb is built from literature curation. Well-studied genes (TP53, EGFR)
+and well-studied drugs have more documented interactions. The enrichment
+framework partially corrects for this (promiscuous drugs are penalised by
+their large $m$), but drugs targeting under-studied genes will have fewer
+documented interactions and may be missed entirely.
+
+### 2. Interaction scores are not cross-source comparable
+
+DGIdb aggregates interaction scores from multiple databases (DrugBank,
+PharmGKB, TALC, etc.) with different scoring schemes. The `total_score`
+column sums across these sources — interpret with caution. The enrichment
+statistics do **not** use interaction scores; they rely only on the binary
+presence/absence of drug–gene interactions.
+
+### 3. Drug mechanism is not considered
+
+The current version does not distinguish between a drug that **inhibits**
+vs. **activates** its target. An inhibitor of a down-regulated tumour
+suppressor may be harmful, not therapeutic. Always review top candidates
+manually for mechanistic plausibility.
+
+### 4. Gene set size matters
+
+Larger gene sets produce more drug hits by chance. The hypergeometric
+test accounts for $n$ (gene set size), but very large sets (thousands of
+genes) will still yield many nominally significant results. In such cases,
+focus on the `enrichment_ratio` as an effect-size filter.
+
+### 5. This is hypothesis generation, not confirmation
+
+DGIdbr ranks drugs for **follow-up investigation**. Results should not be
+reported as "Drug X is statistically proven to treat condition Y." Always
+validate top candidates against independent data sources and, ideally,
+experimental assays.
+
+## References
+
+- Freshour et al. (2021). DGIdb 4.0. *Nucleic Acids Research*, 49(D1), D1144–D1151.
+- Cannon et al. (2024). DGIdb 5.0. *Nucleic Acids Research*, 52(D1), D1233–D1243.
+- Benjamini & Hochberg (1995). Controlling the false discovery rate.
+  *JRSS B*, 57(1), 289–300.
