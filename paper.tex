@@ -1,0 +1,188 @@
+\documentclass[11pt,a4paper]{article}
+
+% ---- Packages ----
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{setspace}
+\doublespacing
+\usepackage{natbib}
+\bibliographystyle{apalike}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{float}
+
+% ---- Code listing style ----
+\definecolor{codegray}{rgb}{0.95,0.95,0.95}
+\lstset{
+  backgroundcolor=\color{codegray},
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  language=R
+}
+
+% ---- Title ----
+\title{DGIdbr: An R Package for Statistically Grounded\\Drug Prioritisation from Gene Sets}
+\author{Lingfeng Zhang$^{1,2}$\\
+  \small \texttt{lingfeng.zhang2@mail.mcgill.ca}\\
+  \small $^{1}$ Department of Psychiatry, Renmin Hospital of Wuhan University, Wuhan, China\\
+  \small $^{2}$ Douglas Research Centre, Department of Psychiatry, McGill University, Montreal, Quebec, Canada
+}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+DGIdbr is an R package that queries the Drug–Gene Interaction Database (DGIdb) and ranks candidate drugs by hypergeometric enrichment with false discovery rate (FDR) correction, rather than by simple hit counting. Given a list of differentially expressed genes, the package identifies drugs whose known targets are statistically overrepresented in the input set, surfacing mechanistically specific candidates over promiscuous ones. Version 1.3 additionally integrates the ChEMBL database to automatically annotate each drug's mechanism of action (inhibitor, activator, antagonist, etc.) and score the consistency between drug action direction and gene expression direction. A drug card lookup function provides rapid access to a drug's targets, mechanism, and clinical indications. The package is implemented entirely in R, depends only on widely available packages (\texttt{httr} and \texttt{jsonlite}), and is freely available under the MIT license.
+\end{abstract}
+
+% ===================================================================
+\section{Introduction}
+% ===================================================================
+
+Translational bioinformatics frequently confronts a deceptively simple question: given a list of genes implicated in a disease or experimental condition, which drugs might be relevant? The naive approach is to query a drug--gene interaction database and rank drugs by how many of the input genes they target. However, this procedure systematically favours promiscuous compounds---drugs that interact with hundreds of genes---regardless of whether the overlap reflects genuine biology.
+
+The Drug--Gene Interaction Database (DGIdb) aggregates drug--gene interactions from over thirty sources, including DrugBank, PharmGKB, ChEMBL, NCIt, and the FDA \citep{freshour2021,cannon2024}. Its GraphQL API enables programmatic access to interactions, drug approval status, and interaction scores.
+
+We present DGIdbr, an R package that replaces naive hit counting with a hypergeometric enrichment framework. For each drug returned by DGIdb, the package computes an enrichment ratio and a Benjamini--Hochberg adjusted \emph{p}-value \citep{benjamini1995}, answering the question: ``Is this drug's overlap with my gene set greater than expected by chance?'' The package supports both case--control (up/down) and multi-subtype gene sets.
+
+Version 1.3 extends the package with automatic integration of the ChEMBL database \citep{zdrazil2024}. For each drug in the output, the mechanism of action is queried from ChEMBL, resolved to HGNC gene symbols, and compared with the input gene's expression direction. A human-readable ``drug card'' summarises a drug's targets, mechanism, and clinical indications.
+
+% ===================================================================
+\section{Statistical framework}
+% ===================================================================
+
+\subsection{Hypergeometric enrichment test}
+\label{sec:enrichment}
+
+Let \(N\) be the total number of druggable genes in DGIdb (approximately 11,600, queried dynamically at runtime). For a given drug that targets \(m\) of these genes, and an input gene set of size \(n\) that contains \(k\) of the drug's targets, the probability of observing an overlap of at least \(k\) under the null hypothesis is given by the hypergeometric distribution:
+
+\[
+P(X \geq k) = 1 - \sum_{i=0}^{k-1} \frac{\binom{m}{i}\binom{N-m}{n-i}}{\binom{N}{n}}.
+\]
+
+Raw \(p\)-values are corrected for multiple testing across all candidate drugs using the Benjamini--Hochberg procedure \citep{benjamini1995}. The enrichment ratio
+
+\[
+\text{ER} = \frac{k/n}{m/N}
+\]
+
+provides an effect-size metric: ER \(> 1\) indicates overrepresentation of the drug's targets in the input set, while ER \(< 1\) suggests underrepresentation.
+
+This framework naturally penalises promiscuous drugs. A chemotherapeutic agent that targets 500 genes and hits 20 input genes yields a modest enrichment ratio of \((20/1000) / (500/11600) = 0.46\), while a specific compound with 4 known targets, 2 of which appear in the input, produces an ER of \((2/1000) / (4/11600) = 5.8\).
+
+\subsection{Direction consistency scoring}
+\label{sec:direction}
+
+When the input CSV contains a \texttt{direction} column (values \texttt{up} or \texttt{down}), DGIdbr v1.3+ automatically queries the ChEMBL database to annotate each drug's mechanism of action. The ChEMBL mechanism endpoint records an \texttt{action\_type} for each drug--target pair (e.g., INHIBITOR, ANTAGONIST, AGONIST, ACTIVATOR). These types are classified into two high-level categories:
+
+\begin{itemize}[noitemsep]
+  \item \textbf{Suppress} --- INHIBITOR, ANTAGONIST, BLOCKER, NEGATIVE ALLOSTERIC MODULATOR, INVERSE AGONIST, and related terms.
+  \item \textbf{Enhance} --- ACTIVATOR, AGONIST, POSITIVE ALLOSTERIC MODULATOR, STIMULATOR, and related terms.
+\end{itemize}
+
+A drug--gene pair is scored as \emph{consistent} if the drug suppresses an overexpressed gene or enhances an underexpressed gene; it is scored as \emph{inconsistent} if the drug's action conflicts with the expression direction. The aggregated output includes three additional columns: the number of targets with ChEMBL data, the number of consistent targets, and the direction consistency ratio.
+
+% ===================================================================
+\section{Implementation}
+% ===================================================================
+
+DGIdbr is written entirely in R and depends only on \texttt{httr} for HTTP requests and \texttt{jsonlite} for JSON parsing. Both are widely available on CRAN. No Bioconductor dependencies are required.
+
+\subsection{Architecture}
+
+The package exposes two user-level functions and several internal helpers.
+
+\paragraph{Gene-set analysis: \texttt{DGIdbr()}} The main entry point accepts a CSV directory, a mode (\texttt{group} or \texttt{subtype}), and optional parameters for FDA approval filtering and enrichment control. Internally, it:
+
+\begin{enumerate}[noitemsep]
+  \item Reads the input CSV and builds gene sets, split by direction (\texttt{up}/\texttt{down}) and, in subtype mode, by subtype label.
+  \item For each gene set, queries the DGIdb GraphQL API with a batched gene list and aggregates the returned drug--gene interactions.
+  \item Fetches drug metadata (approval status) from DGIdb and optionally filters to approved drugs.
+  \item Computes hypergeometric enrichment statistics (Section~\ref{sec:enrichment}).
+  \item When direction data is present, queries ChEMBL for mechanism-of-action records and computes consistency scores (Section~\ref{sec:direction}).
+  \item Writes \texttt{dgidb\_hits.csv} (drug-level aggregation) and \texttt{dgidb\_raw.csv} (gene-level interactions).
+\end{enumerate}
+
+\paragraph{Drug card lookup: \texttt{drug\_card()}} This function accepts a drug name (e.g., ``ASPIRIN'') and returns a human-readable summary along with a structured list containing:
+
+\begin{itemize}[noitemsep]
+  \item The ChEMBL molecule ID and maximum clinical phase.
+  \item Mechanism of action records (target ChEMBL ID, action type, description), with targets resolved to HGNC gene symbols via the ChEMBL target endpoint.
+  \item Clinical indications with development phases, optionally filtered by phase status via the \texttt{phase} parameter (\texttt{"all"}, \texttt{"approved"}, or \texttt{"trial"}).
+\end{itemize}
+
+\subsection{Caching and error handling}
+
+Both the DGIdb and ChEMBL query layers implement in-memory caches to avoid redundant API calls within a session. All network requests are wrapped in \texttt{tryCatch} blocks; if an API is unreachable, informative messages are printed and the analysis continues with available data. When ChEMBL is unavailable, direction columns are filled with \texttt{NA} without interrupting the core enrichment pipeline.
+
+% ===================================================================
+\section{Usage examples}
+\label{sec:examples}
+% ===================================================================
+
+\subsection{Gene-set analysis}
+
+The input CSV for group mode must minimally contain columns \texttt{gene} and \texttt{direction}:
+
+\begin{lstlisting}
+gene,direction
+EGFR,up
+TP53,down
+PTGS2,up
+...
+\end{lstlisting}
+
+The analysis is then run as:
+
+\begin{lstlisting}
+library(DGIdbr)
+DGIdbr(mode = "group", base_tables = ".",
+       group_filename = "group.csv", base_out = ".",
+       approve = TRUE, enrichment = TRUE)
+\end{lstlisting}
+
+The output file \texttt{dgidb\_hits.csv} contains drug-level results sorted by FDR. Key columns include \texttt{drug}, \texttt{gene\_count}, \texttt{enrichment\_ratio}, \texttt{p\_value}, \texttt{fdr}, and---when direction data is available---\texttt{n\_with\_direction\_data}, \texttt{n\_direction\_consistent}, and \texttt{direction\_ratio}.
+
+\subsection{Drug card lookup}
+
+A drug's targets, mechanism, and indications can be retrieved directly:
+
+\begin{lstlisting}
+card <- drug_card("ASPIRIN")
+card$target_genes           # PTGS2
+card$mechanisms$action_type # "INHIBITOR"
+card$indications$disease    # 49 indications
+
+# Filter to approved indications only
+drug_card("ASPIRIN", phase = "approved")
+\end{lstlisting}
+
+The function prints a formatted summary and returns a structured list for programmatic use.
+
+\subsection{Computational cost}
+
+DGIdb queries are the dominant cost and scale linearly with the number of input genes and returned drugs. A typical run with 1,000 input genes completes in under two minutes on a standard workstation. ChEMBL queries add modest overhead and are cached per session.
+
+% ===================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+% ===================================================================
+
+DGIdbr provides a statistically principled alternative to naive counting for drug prioritisation from gene sets. The integration of ChEMBL mechanism-of-action data adds a biologically meaningful layer of interpretation by scoring the consistency between drug action direction and gene expression changes. The package is freely available and can be installed directly from GitHub.
+
+Future development directions include the integration of drug-induced gene expression signatures (LINCS L1000 / CMap) for perturbation-based drug prioritisation, and support for additional drug--gene interaction sources. Contributions and feature requests are welcome through the GitHub repository.
+
+% ===================================================================
+% References
+% ===================================================================
+\bibliography{refs}
+
+\end{document}
