@@ -1,0 +1,78 @@
+* using log directory ‘/Users/lfzhang/Documents/Code/DGIdbr/DGIdbr.Rcheck’
+* using R version 4.4.3 (2025-02-28)
+* using platform: aarch64-apple-darwin20.0.0
+* R was compiled by
+    clang version 18.1.8
+    GNU Fortran (GCC) 13.3.0
+* running under: macOS 26.5.2
+* using session charset: UTF-8
+* using option ‘--no-manual’
+* checking for file ‘DGIdbr/DESCRIPTION’ ... OK
+* checking extension type ... Package
+* this is package ‘DGIdbr’ version ‘1.3.0’
+* package encoding: UTF-8
+* checking package namespace information ... OK
+* checking package dependencies ... OK
+* checking if this is a source package ... OK
+* checking if there is a namespace ... OK
+* checking for executable files ... OK
+* checking for hidden files and directories ... NOTE
+Found the following hidden files and directories:
+  .github
+These were most likely included in error. See section ‘Package
+structure’ in the ‘Writing R Extensions’ manual.
+* checking for portable file names ... OK
+* checking for sufficient/correct file permissions ... OK
+* checking whether package ‘DGIdbr’ can be installed ... OK
+* checking installed package size ... OK
+* checking package directory ... OK
+* checking ‘build’ directory ... OK
+* checking DESCRIPTION meta-information ... NOTE
+License components which are templates and need '+ file LICENSE':
+  MIT
+* checking top-level files ... NOTE
+File
+  LICENSE
+is not mentioned in the DESCRIPTION file.
+* checking for left-over files ... OK
+* checking index information ... OK
+* checking package subdirectories ... OK
+* checking code files for non-ASCII characters ... OK
+* checking R files for syntax errors ... OK
+* checking whether the package can be loaded ... OK
+* checking whether the package can be loaded with stated dependencies ... OK
+* checking whether the package can be unloaded cleanly ... OK
+* checking whether the namespace can be loaded with stated dependencies ... OK
+* checking whether the namespace can be unloaded cleanly ... OK
+* checking dependencies in R code ... OK
+* checking S3 generic/method consistency ... OK
+* checking replacement functions ... OK
+* checking foreign function calls ... OK
+* checking R code for possible problems ... NOTE
+build_gene_sets: no visible global function definition for ‘read.csv’
+read_genes_with_dir: no visible global function definition for
+  ‘read.csv’
+run_gene_set: no visible global function definition for ‘aggregate’
+run_gene_set: no visible global function definition for ‘write.csv’
+Undefined global functions or variables:
+  aggregate read.csv write.csv
+Consider adding
+  importFrom("stats", "aggregate")
+  importFrom("utils", "read.csv", "write.csv")
+to your NAMESPACE file.
+* checking Rd files ... OK
+* checking Rd metadata ... OK
+* checking Rd cross-references ... OK
+* checking for missing documentation entries ... OK
+* checking for code/documentation mismatches ... OK
+* checking Rd \usage sections ... OK
+* checking Rd contents ... OK
+* checking for unstated dependencies in examples ... OK
+* checking installed files from ‘inst/doc’ ... OK
+* checking files in ‘vignettes’ ... OK
+* checking examples ... OK
+* checking for unstated dependencies in vignettes ... OK
+* checking package vignettes ... OK
+* checking re-building of vignette outputs ... OK
+* DONE
+Status: 4 NOTEs

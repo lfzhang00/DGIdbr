@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="L. Zhang" />
+
+<meta name="date" content="2026-07-19" />
+
+<title>DGIdbr: Statistical Drug Prioritisation from Gene Sets</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">DGIdbr: Statistical Drug Prioritisation
+from Gene Sets</h1>
+<h4 class="author">L. Zhang</h4>
+<h4 class="date">2026-07-19</h4>
+
+
+
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(DGIdbr)</span></code></pre></div>
+<div id="why-this-package-exists" class="section level2">
+<h2>Why This Package Exists</h2>
+<p>A common task in translational bioinformatics is: <em>“I have a list
+of differentially expressed genes — which drugs might be
+relevant?”</em></p>
+<p>The naïve approach is to query a drug–gene interaction database,
+count how many of your genes each drug targets, and sort by that count.
+This is what DGIdbr v1.0 did, and it has a fundamental problem:</p>
+<blockquote>
+<p><strong>Drugs that target many genes (promiscuous drugs) always rank
+first,</strong> <strong>regardless of whether the enrichment is
+statistically meaningful.</strong></p>
+</blockquote>
+<p>Consider two drugs:</p>
+<table>
+<thead>
+<tr class="header">
+<th>Drug</th>
+<th>Genes it targets (total)</th>
+<th>Hits in your gene set</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Drug A</td>
+<td>500</td>
+<td>20</td>
+</tr>
+<tr class="even">
+<td>Drug B</td>
+<td>30</td>
+<td>15</td>
+</tr>
+</tbody>
+</table>
+<p>A naïve count ranks Drug A first (20 &gt; 15). But Drug B hits
+<strong>50%</strong> of its targets in your gene set, while Drug A hits
+only <strong>4%</strong>. Drug B is far more likely to represent a
+genuine biological signal.</p>
+<p>DGIdbr v1.1+ replaces counting with a <strong>hypergeometric
+enrichment test</strong> that answers: <em>“Is the overlap between this
+drug’s targets and my gene set greater than expected by
+chance?”</em></p>
+</div>
+<div id="the-statistical-framework" class="section level2">
+<h2>The Statistical Framework</h2>
+<div id="hypergeometric-test" class="section level3">
+<h3>Hypergeometric test</h3>
+<p>For each drug we compute:</p>
+<p><span class="math display">\[P(X \geq k) = 1 - \sum_{i=0}^{k-1}
+\frac{\binom{m}{i}\binom{N-m}{n-i}}{\binom{N}{n}}\]</span></p>
+<p>Where:</p>
+<table>
+<thead>
+<tr class="header">
+<th>Symbol</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><span class="math inline">\(k\)</span></td>
+<td>Number of input genes that interact with this drug</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(m\)</span></td>
+<td>Total number of genes this drug targets (from DGIdb)</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(n\)</span></td>
+<td>Number of genes in your input gene set</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(N\)</span></td>
+<td>Background: total druggable genes in DGIdb (~11,665)</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="enrichment-ratio" class="section level3">
+<h3>Enrichment ratio</h3>
+<p><span class="math display">\[\text{ER} = \frac{k/n}{m/N}\]</span></p>
+<ul>
+<li>ER &gt; 1 → drug’s targets are <strong>over-represented</strong> in
+your gene set</li>
+<li>ER &lt; 1 → drug’s targets are
+<strong>under-represented</strong></li>
+<li>ER = 1 → exactly what you’d expect by chance</li>
+</ul>
+</div>
+<div id="fdr-correction" class="section level3">
+<h3>FDR correction</h3>
+<p>Raw p-values are adjusted with the Benjamini–Hochberg procedure to
+control the false discovery rate across all tested drugs.</p>
+</div>
+</div>
+<div id="quick-start" class="section level2">
+<h2>Quick Start</h2>
+<div id="group-casecontrol-mode" class="section level3">
+<h3>Group (case–control) mode</h3>
+<p>Input CSV must have columns: <code>gene</code>,
+<code>direction</code> (up/down).</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">DGIdbr</span>(</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>  <span class="at">mode       =</span> <span class="st">&quot;group&quot;</span>,</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>  <span class="at">base_tables =</span> <span class="st">&quot;path/to/tables&quot;</span>,</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>  <span class="at">group_filename =</span> <span class="st">&quot;group.csv&quot;</span>,</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>  <span class="at">base_out   =</span> <span class="st">&quot;path/to/output&quot;</span>,</span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>  <span class="at">approve    =</span> <span class="cn">TRUE</span>,       <span class="co"># FDA-approved drugs only</span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>  <span class="at">enrichment =</span> <span class="cn">TRUE</span>         <span class="co"># default: hypergeometric test + FDR</span></span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="subtype-mode" class="section level3">
+<h3>Subtype mode</h3>
+<p>Input CSV must have columns: <code>gene</code>,
+<code>direction</code>, <code>subtype</code>.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">DGIdbr</span>(</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="at">mode       =</span> <span class="st">&quot;subtype&quot;</span>,</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  <span class="at">base_tables =</span> <span class="st">&quot;path/to/tables&quot;</span>,</span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>  <span class="at">subtype_filename =</span> <span class="st">&quot;subtype.csv&quot;</span>,</span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>  <span class="at">base_out   =</span> <span class="st">&quot;path/to/output&quot;</span>,</span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>  <span class="at">approve    =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>  <span class="at">enrichment  =</span> <span class="cn">TRUE</span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="backward-compatible-mode" class="section level3">
+<h3>Backward-compatible mode</h3>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">DGIdbr</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">mode        =</span> <span class="st">&quot;group&quot;</span>,</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">enrichment  =</span> <span class="cn">FALSE</span>   <span class="co"># original gene_count ranking</span></span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+</div>
+<div id="understanding-the-output" class="section level2">
+<h2>Understanding the Output</h2>
+<p>The main output file <code>dgidb_hits.csv</code> contains these
+columns:</p>
+<table>
+<colgroup>
+<col width="38%" />
+<col width="61%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Column</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>drug</code></td>
+<td>Drug name</td>
+</tr>
+<tr class="even">
+<td><code>gene_count</code></td>
+<td>How many of your input genes this drug targets</td>
+</tr>
+<tr class="odd">
+<td><code>total_targets</code></td>
+<td>How many genes this drug targets in total (from DGIdb)</td>
+</tr>
+<tr class="even">
+<td><code>total_score</code></td>
+<td>Sum of DGIdb interaction scores</td>
+</tr>
+<tr class="odd">
+<td><code>max_score</code></td>
+<td>Highest single interaction score</td>
+</tr>
+<tr class="even">
+<td><code>genes</code></td>
+<td>Which of your genes interact with this drug</td>
+</tr>
+<tr class="odd">
+<td><code>sources</code></td>
+<td>Source databases supporting the interactions</td>
+</tr>
+<tr class="even">
+<td><code>approved</code></td>
+<td>FDA approval status</td>
+</tr>
+<tr class="odd">
+<td><code>enrichment_ratio</code></td>
+<td><span class="math inline">\((k/n) / (m/N)\)</span> — fold enrichment
+over random expectation</td>
+</tr>
+<tr class="even">
+<td><code>p_value</code></td>
+<td>Raw hypergeometric p-value</td>
+</tr>
+<tr class="odd">
+<td><code>fdr</code></td>
+<td>Benjamini–Hochberg adjusted p-value</td>
+</tr>
+<tr class="even">
+<td><code>significance</code></td>
+<td><code>***</code> &lt; 0.001, <code>**</code> &lt; 0.01,
+<code>*</code> &lt; 0.05, <code>.</code> &lt; 0.1, <code>ns</code></td>
+</tr>
+<tr class="odd">
+<td><code>n_with_direction_data</code></td>
+<td>Pairs with ChEMBL mechanism annotation</td>
+</tr>
+<tr class="even">
+<td><code>n_direction_consistent</code></td>
+<td>Pairs where drug action aligns with gene direction</td>
+</tr>
+<tr class="odd">
+<td><code>direction_ratio</code></td>
+<td>Consistent / annotated (direction consistency rate)</td>
+</tr>
+</tbody>
+</table>
+<div id="how-to-filter-results" class="section level3">
+<h3>How to filter results</h3>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>hits <span class="ot">&lt;-</span> <span class="fu">read.csv</span>(<span class="st">&quot;dgidb_hits.csv&quot;</span>)</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a></span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="co"># Strict: FDR &lt; 0.05 AND enrichment_ratio &gt; 5</span></span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>strict <span class="ot">&lt;-</span> <span class="fu">subset</span>(hits, fdr <span class="sc">&lt;</span> <span class="fl">0.05</span> <span class="sc">&amp;</span> enrichment_ratio <span class="sc">&gt;</span> <span class="dv">5</span>)</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="co"># Exploratory: FDR &lt; 0.1</span></span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>exploratory <span class="ot">&lt;-</span> <span class="fu">subset</span>(hits, fdr <span class="sc">&lt;</span> <span class="fl">0.1</span>)</span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a></span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co"># Top candidates sorted by FDR</span></span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="fu">head</span>(hits[<span class="fu">order</span>(hits<span class="sc">$</span>fdr), <span class="fu">c</span>(<span class="st">&quot;drug&quot;</span>, <span class="st">&quot;gene_count&quot;</span>, <span class="st">&quot;total_targets&quot;</span>,</span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a>     <span class="st">&quot;enrichment_ratio&quot;</span>, <span class="st">&quot;fdr&quot;</span>, <span class="st">&quot;significance&quot;</span>)], <span class="dv">10</span>)</span></code></pre></div>
+</div>
+</div>
+<div id="worked-example" class="section level2">
+<h2>Worked Example</h2>
+<p>We use 9 well-known cancer-related genes to demonstrate the
+difference between counting-based and enrichment-based ranking.</p>
+<div id="without-enrichment-v1.0-behaviour" class="section level3">
+<h3>Without enrichment (v1.0 behaviour)</h3>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="co"># (results shown from a pre-computed run)</span></span></code></pre></div>
+<table>
+<thead>
+<tr class="header">
+<th>Rank</th>
+<th>Drug</th>
+<th>gene_count</th>
+<th>total_score</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td>RIBAVIRIN</td>
+<td>3</td>
+<td>0.137</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td>CISPLATIN</td>
+<td>3</td>
+<td>0.046</td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td>CARBOPLATIN</td>
+<td>3</td>
+<td>0.038</td>
+</tr>
+<tr class="even">
+<td>4</td>
+<td>PACLITAXEL</td>
+<td>3</td>
+<td>0.020</td>
+</tr>
+</tbody>
+</table>
+<p>These are all broad-spectrum chemotherapies that interact with
+hundreds of genes. They rank highly simply because they are
+promiscuous.</p>
+</div>
+<div id="with-enrichment-v1.1-default" class="section level3">
+<h3>With enrichment (v1.1+, default)</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Rank</th>
+<th>Drug</th>
+<th>gene_count</th>
+<th>total_targets</th>
+<th>enrichment_ratio</th>
+<th>FDR</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td>CHEMBL1214407</td>
+<td>2</td>
+<td>4</td>
+<td>648.1</td>
+<td>0.0011</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td>CHEMBL587620</td>
+<td>2</td>
+<td>5</td>
+<td>518.4</td>
+<td>0.0011</td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td>ONONIN</td>
+<td>2</td>
+<td>5</td>
+<td>518.4</td>
+<td>0.0011</td>
+</tr>
+<tr class="even">
+<td>4</td>
+<td>RIBAVIRIN</td>
+<td>3</td>
+<td>37</td>
+<td>105.1</td>
+<td>0.0011</td>
+</tr>
+</tbody>
+</table>
+<p>CHEMBL1214407 (a relatively obscure compound) ranks first because 2
+of its only 4 known targets appear in our gene set — a 648-fold
+enrichment over random expectation. This is the kind of specific,
+unexpected finding that the enrichment framework is designed to
+surface.</p>
+</div>
+</div>
+<div id="choosing-background_n" class="section level2">
+<h2>Choosing <code>background_N</code></h2>
+<p>The default (<code>NULL</code>) automatically queries DGIdb for the
+current count of druggable genes (~11,665 as of 2025). This is the
+recommended setting.</p>
+<p>You may override it if:</p>
+<ul>
+<li>You want a more conservative test → use larger N (e.g. 20000 for all
+protein-coding genes)</li>
+<li>You want to restrict to a specific gene universe → provide your own
+count</li>
+</ul>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co"># More conservative (all protein-coding genes)</span></span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">DGIdbr</span>(..., <span class="at">background_N =</span> <span class="dv">20000</span>)</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co"># Auto-detect (recommended)</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="fu">DGIdbr</span>(..., <span class="at">background_N =</span> <span class="cn">NULL</span>)</span></code></pre></div>
+</div>
+<div id="important-caveats" class="section level2">
+<h2>Important Caveats</h2>
+<div id="study-bias" class="section level3">
+<h3>1. Study bias</h3>
+<p>DGIdb is built from literature curation. Well-studied genes (TP53,
+EGFR) and well-studied drugs have more documented interactions. The
+enrichment framework partially corrects for this (promiscuous drugs are
+penalised by their large <span class="math inline">\(m\)</span>), but
+drugs targeting under-studied genes will have fewer documented
+interactions and may be missed entirely.</p>
+</div>
+<div id="interaction-scores-are-not-cross-source-comparable" class="section level3">
+<h3>2. Interaction scores are not cross-source comparable</h3>
+<p>DGIdb aggregates interaction scores from multiple databases
+(DrugBank, PharmGKB, TALC, etc.) with different scoring schemes. The
+<code>total_score</code> column sums across these sources — interpret
+with caution. The enrichment statistics do <strong>not</strong> use
+interaction scores; they rely only on the binary presence/absence of
+drug–gene interactions.</p>
+</div>
+<div id="drug-mechanism-direction" class="section level3">
+<h3>3. Drug mechanism direction</h3>
+<p>v1.3+ queries the ChEMBL API to determine a drug’s mechanism of
+action (inhibitor, activator, antagonist, etc.) and scores the
+consistency between drug action direction and gene expression direction.
+The output columns <code>n_with_direction_data</code>,
+<code>n_direction_consistent</code>, and <code>direction_ratio</code>
+quantify this alignment automatically.</p>
+<p>However, ChEMBL’s coverage is not complete — some drugs lack
+mechanism annotations, and some targets may not resolve cleanly to a
+gene symbol. In such cases the direction columns are filled with
+<code>NA</code>. Also note that the classification (suppress
+vs. enhance) is a heuristic; context- dependent effects
+(e.g. tissue-specific signalling, oncogene vs. tumour suppressor) should
+always be reviewed manually for top candidates.</p>
+</div>
+<div id="gene-set-size-matters" class="section level3">
+<h3>4. Gene set size matters</h3>
+<p>Larger gene sets produce more drug hits by chance. The hypergeometric
+test accounts for <span class="math inline">\(n\)</span> (gene set
+size), but very large sets (thousands of genes) will still yield many
+nominally significant results. In such cases, focus on the
+<code>enrichment_ratio</code> as an effect-size filter.</p>
+</div>
+<div id="this-is-hypothesis-generation-not-confirmation" class="section level3">
+<h3>5. This is hypothesis generation, not confirmation</h3>
+</div>
+</div>
+<div id="drug-card-lookup-v1.3.0" class="section level2">
+<h2>Drug Card Lookup (v1.3.0)</h2>
+<p>Besides gene set analysis, v1.3.0 introduces <code>drug_card()</code>
+for looking up a drug’s targets, mechanism of action, and clinical
+indications directly:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">library</span>(DGIdbr)</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>card <span class="ot">&lt;-</span> <span class="fu">drug_card</span>(<span class="st">&quot;ASPIRIN&quot;</span>)</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>card<span class="sc">$</span>target_genes           <span class="co"># PTGS2 (cyclooxygenase-2)</span></span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>card<span class="sc">$</span>mechanisms<span class="sc">$</span>action_type <span class="co"># &quot;INHIBITOR&quot;</span></span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>card<span class="sc">$</span>indications<span class="sc">$</span>disease    <span class="co"># fever, pain, stroke, ...</span></span></code></pre></div>
+<p>The function queries the ChEMBL API to: 1. Resolve the drug name to a
+ChEMBL molecule ID 2. Fetch mechanism of action records (action type +
+target) 3. Resolve ChEMBL target IDs to HGNC gene symbols 4. Fetch
+clinical indications with development phases</p>
+<p>Results are printed as a human-readable card and returned invisibly
+as a structured list for programmatic use. If the drug or its mechanism
+data is not found in ChEMBL, a clear message is printed and the function
+returns <code>NULL</code>.</p>
+<div id="this-is-hypothesis-generation-not-confirmation-1" class="section level3">
+<h3>6. This is hypothesis generation, not confirmation</h3>
+<p>DGIdbr ranks drugs for <strong>follow-up investigation</strong>.
+Results should not be reported as “Drug X is statistically proven to
+treat condition Y.” Always validate top candidates against independent
+data sources and, ideally, experimental assays.</p>
+</div>
+</div>
+<div id="references" class="section level2">
+<h2>References</h2>
+<ul>
+<li>Freshour et al. (2021). DGIdb 4.0. <em>Nucleic Acids Research</em>,
+49(D1), D1144–D1151.</li>
+<li>Cannon et al. (2024). DGIdb 5.0. <em>Nucleic Acids Research</em>,
+52(D1), D1233–D1243.</li>
+<li>Benjamini &amp; Hochberg (1995). Controlling the false discovery
+rate. <em>JRSS B</em>, 57(1), 289–300.</li>
+</ul>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

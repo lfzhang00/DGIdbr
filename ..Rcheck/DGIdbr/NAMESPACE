@@ -2,3 +2,4 @@
 export(DGIdbr)
 export(run_gene_set)
 export(build_gene_sets)
+export(drug_card)
