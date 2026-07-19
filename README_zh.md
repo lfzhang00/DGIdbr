@@ -38,13 +38,15 @@
 - **FDA 批准过滤**——仅保留已批准药物，或纳入研究性药物
 - **完全向后兼容**——设置 `enrichment = FALSE` 即可回退到旧的计数模式
 
-### v1.3.0 新增 —— ChEMBL 集成
+### v1.3.1 新增 —— ChEMBL 集成 + 适应症筛选
 - **药物作用方向一致性评分**：如果输入 CSV 包含 `direction` 列（`up` / `down`），
   DGIdbr 自动查询 ChEMBL API 获取每个药物的作用机制（抑制剂、激活剂、拮抗剂等），
   并与基因表达方向进行一致性评分。输出 CSV 新增三列：
   `n_with_direction_data`、`n_direction_consistent`、`direction_ratio`。
 - **药物卡片查询**：无需输入基因集，直接搜索药名即可获取其 ChEMBL 分子信息、
   作用机制、解析后的靶基因符号以及带临床阶段的适应症列表。
+- **适应症阶段筛选**：`drug_card()` 新增 `phase` 参数，支持按 `"approved"`（仅已批准）、
+  `"trial"`（仅临床试验中）或 `"all"`（全部）筛选适应症。
 
 ## 安装
 
@@ -97,7 +99,7 @@ DGIdbr(
 DGIdbr(mode = "group", ..., enrichment = FALSE)
 ```
 
-### 药物卡片查询（v1.3.0 新增）
+### 药物卡片查询（v1.3.1 新增）
 
 直接搜药名，获取靶点、机制和适应症：
 
