@@ -15,4 +15,4 @@ VignetteBuilder: knitr
 RoxygenNote: 7.3.3
 NeedsCompilation: no
 Packaged: 2026-07-19 17:49:33 UTC; lfzhang
-Built: R 4.4.3; ; 2026-07-19 17:49:36 UTC; unix
+Built: R 4.4.3; ; 2026-07-19 18:03:04 UTC; unix

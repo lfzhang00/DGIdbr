@@ -4,7 +4,7 @@
 
 # DGIdbr
 
-[![R CMD check](https://github.com/lancelotzhang0124/DGIdbr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/lancelotzhang0124/DGIdbr/actions)
+[![R CMD check](https://github.com/lfzhang00/DGIdbr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/lfzhang00/DGIdbr/actions)
 [![Version](https://img.shields.io/badge/version-1.3.1-blue)](https://github.com/lfzhang00/DGIdbr)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
