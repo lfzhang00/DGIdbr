@@ -633,6 +633,9 @@ chembl_fetch_indications <- function(mol_id, max_results = 50) {
 #'
 #' @param drug_name Character; drug name (e.g. \code{"ASPIRIN"},
 #'   \code{"CISPLATIN"}, \code{"TAMOXIFEN"}).
+#' @param phase Filter for indications by development phase:
+#'   \code{"all"} (default, show everything), \code{"approved"} (Phase 4 /
+#'   approved only), or \code{"trial"} (Phase 1-3, investigational only).
 #' @return Invisibly returns a list with components:
 #'   \describe{
 #'     \item{drug}{Drug name.}
@@ -648,7 +651,8 @@ chembl_fetch_indications <- function(mol_id, max_results = 50) {
 #' drug_card("ASPIRIN")
 #' drug_card("CISPLATIN")
 #' }
-drug_card <- function(drug_name) {
+drug_card <- function(drug_name, phase = c("all", "approved", "trial")) {
+  phase <- match.arg(phase)
   if (is.null(drug_name) || is.na(drug_name) || !nzchar(drug_name)) {
     stop("Please provide a drug name.")
   }
@@ -728,11 +732,26 @@ drug_card <- function(drug_name) {
   }
 
   # ---- Step 4: indications ----
-  cat("=> Indications:\n")
+  cat("=> Indications")
+  if (phase == "approved") cat(" (approved only)")
+  if (phase == "trial") cat(" (investigational only)")
+  cat(":\n")
   indications <- chembl_fetch_indications(mol_id)
 
   if (is.data.frame(indications) && nrow(indications) > 0 &&
       "disease" %in% names(indications)) {
+    # Filter by phase
+    if (phase != "all" && "max_phase_for_ind" %in% names(indications)) {
+      phase_n <- as.numeric(indications$max_phase_for_ind)
+      before <- nrow(indications)
+      if (phase == "approved") {
+        indications <- indications[!is.na(phase_n) & phase_n >= 4, ]
+      } else { # trial
+        indications <- indications[!is.na(phase_n) & phase_n >= 1 & phase_n < 4, ]
+      }
+      n_removed <- before - nrow(indications)
+      if (n_removed > 0) cat(sprintf("  (%d indications filtered out)\n", n_removed))
+    }
     # Sort by phase descending
     if ("max_phase_for_ind" %in% names(indications)) {
       phase_numeric <- as.numeric(indications$max_phase_for_ind)

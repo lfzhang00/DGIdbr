@@ -4,11 +4,15 @@
 \alias{drug_card}
 \title{Look up a drug: targets, mechanism, indications}
 \usage{
-drug_card(drug_name)
+drug_card(drug_name, phase = c("all", "approved", "trial"))
 }
 \arguments{
 \item{drug_name}{Character; drug name (e.g. \code{"ASPIRIN"},
 \code{"CISPLATIN"}, \code{"TAMOXIFEN"}).}
+
+\item{phase}{Filter for indications by development phase:
+\code{"all"} (default, show everything), \code{"approved"} (Phase 4 /
+approved only), or \code{"trial"} (Phase 1-3, investigational only).}
 }
 \value{
 Invisibly returns a list with components:

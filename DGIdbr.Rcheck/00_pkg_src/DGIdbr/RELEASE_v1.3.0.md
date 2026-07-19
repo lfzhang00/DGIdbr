@@ -1,89 +1,106 @@
-# DGIdbr v1.3.0 -- ChEMBL 集成：药物方向评分 + 药物卡片
+# DGIdbr v1.3.0 — ChEMBL Integration: Direction Scoring + Drug Card
 
-## 概览
+## Highlights
 
-v1.3.0 将 ChEMBL API 集成为包的一等公民，无需用户额外配置即可自动获取
-药物作用机制和适应症数据。新增两个核心能力：
+**v1.3.0** integrates the ChEMBL API as a first-class data source, enabling two
+new capabilities with zero user configuration:
 
-1. **方向一致性评分**（自动）-- 输入 CSV 只要有 `direction` 列，自动
-  查询 ChEMBL 并计算方向匹配度
-2. **药物卡片查询**（交互）-- 搜药名就能看靶点、机制、适应症
+1. **Direction consistency scoring** (automatic) — when your input CSV has a
+   `direction` column, DGIdbr automatically queries ChEMBL for each drug's
+   mechanism of action and scores how well the drug's action direction
+   (inhibit vs. activate) aligns with the gene's expression direction
+   (up vs. down).
+2. **Drug card lookup** (interactive) — search any drug name to instantly get
+   its targets, mechanism of action, and clinical indications with
+   development phases.
 
-## 新增内容
+## What's new
 
-### 新功能
+### New exported function
 
-- `drug_card(drug_name)` -- 公开函数。搜索药物，返回靶基因、作用机制和
-  临床适应症。输出可读摘要 + 结构化列表。
+| Function | Description |
+|----------|-------------|
+| `drug_card(drug_name, phase)` | Look up a drug: returns a structured list with `$target_genes`, `$mechanisms`, `$indications`, and prints a human-readable summary card. `phase` accepts `"all"` (default), `"approved"`, or `"trial"`. |
 
-- **自动方向评分** -- `run_gene_set()` 新增 `gene_direction` 参数，
-  `build_gene_sets()` 自动从 CSV 提取方向信息。当 CSV 含 `direction`
-  列时，输出 `dgidb_hits.csv` 自动新增三列：
-  - `n_with_direction_data` -- 有 ChEMBL 注释的靶基因数
-  - `n_direction_consistent` -- 方向一致的靶基因数
-  - `direction_ratio` -- 方向一致率
+### Automatic direction scoring
 
-### 底层新增（内部函数）
+- `run_gene_set()` gains a new `gene_direction` parameter (internal, populated
+  automatically from the input CSV)
+- `build_gene_sets()` now extracts per-gene direction metadata from the input
+- Output CSV `dgidb_hits.csv` now includes three new columns:
+  - `n_with_direction_data` — how many of this drug's targets have ChEMBL mechanism annotations
+  - `n_direction_consistent` — how many targets have action direction consistent with expression direction
+  - `direction_ratio` — consistent / annotated (proportion of matches)
 
-| 函数 | 用途 |
-|------|------|
-| `chembl_map_drug_to_molecule()` | 药物名 → ChEMBL 分子 ID（批量、缓存） |
-| `chembl_fetch_mechanisms()` | 获取药物作用机制（action_type + 靶点） |
-| `chembl_target_to_gene()` | ChEMBL 靶点 ID → HGNC 基因符号 |
-| `chembl_fetch_indications()` | 获取药物适应症（含临床阶段） |
-| `classify_action_direction()` | 将 action_type 分类为 suppress/enhance |
-| `compute_direction_consistency()` | 核心：计算方向一致性评分 |
+### New internal functions
 
-### 文件变更
+| Function | Purpose |
+|----------|---------|
+| `chembl_map_drug_to_molecule()` | Drug name → ChEMBL molecule ID (batched, cached) |
+| `chembl_fetch_mechanisms()` | Fetch mechanism of action records (action_type + target) |
+| `chembl_target_to_gene()` | Resolve ChEMBL target IDs to HGNC gene symbols |
+| `chembl_fetch_indications()` | Fetch clinical indications with development phases |
+| `classify_action_direction()` | Map action types (INHIBITOR, AGONIST, …) to suppress/enhance |
+| `compute_direction_consistency()` | Core scoring function for direction consistency |
 
-| 文件 | 状态 | 说明 |
-|------|------|------|
-| `R/direction.R` | **新增** | ChEMBL 客户端 + 方向评分模块 (~590行) |
-| `R/DGIdbr.R` | 修改 | `build_gene_sets()` 添加方向元数据；`run_gene_set()` 集成方向分析 |
-| `NAMESPACE` | 修改 | 新增 `export(drug_card)` |
-| `DESCRIPTION` | 修改 | 版本号 1.2.0 → 1.3.0 |
-| `README.md` / `README_zh.md` | 修改 | 完整更新，新增 ChEMBL 文档和环境变量说明 |
-| `man/*.Rd` | 修改 | roxygen2 重新生成全部手册页 |
+### Bug fixes
 
-## 使用方法
+- Fixed drug name lookup: replaced broken `/drug.json?name__in=` with
+  `/molecule.json?pref_name__in=` (the drug endpoint's `name` field is always
+  `None`)
+- Fixed pagination metadata key: ChEMBL uses `page_meta` (not `page_metadata`)
+  with a `next` field
+- Fixed target synonym field names: ChEMBL returns `component_synonym` and
+  `syn_type` (not `synonym` and `synonym_type`)
+- Removed duplicate scoring block left over from a partial edit
+
+### Documentation
+
+- `README.md` / `README_zh.md` fully updated: new features, environment
+  variables, direction scoring explanation, version history table
+- Vignette updated with Drug Card Lookup section
+- All man pages regenerated via roxygen2
+
+## Migration notes
+
+- **Fully backward compatible** — input CSVs without a `direction` column
+  behave exactly as before
+- `enrichment = FALSE` (counting mode) still works
+- `DGIdbr()` function signature is unchanged — no new parameters to learn
+- Direction scoring is **automatic** when a `direction` column is present;
+  if ChEMBL is unreachable, direction columns are silently filled with `NA`
+
+## Installation
+
+```r
+# install.packages("remotes")
+remotes::install_github("lfzhang00/DGIdbr")
+```
+
+## Quick example
 
 ```r
 library(DGIdbr)
 
-# 用法 1：基因集 → 药物排序（方向评分自动触发）
+# Gene-set driven drug prioritisation (direction scoring automatic)
 DGIdbr(mode = "group", base_tables = ".", group_filename = "group.csv")
 
-# 用法 2：搜药
+# Drug card lookup
 card <- drug_card("ASPIRIN")
-card$target_genes       # PTGS2
-card$indications        # 49 条适应症
+card$target_genes           # "PTGS2"
+card$mechanisms$action_type # "INHIBITOR"
+card$indications            # 49 indications with phases
 ```
 
-## 行为变更
+## Dependencies
 
-- 输入 CSV 含 `direction` 列时，**方向分析自动启用**（无侵入式，ChEMBL
-  不可用时优雅降级）
-- `dgidb_hits.csv` 新增三列方向数据（若 ChEMBL 不可用则为 NA）
-- 输出文件 "dgidb_raw.csv" 新增 `direction_match` 列
+- New runtime dependency: ChEMBL REST API (`https://www.ebi.ac.uk/chembl/api/data`)
+- No new R package dependencies (httr, jsonlite, utils — unchanged)
+- Behind an HTTP proxy? Set `NO_PROXY=www.ebi.ac.uk,ebi.ac.uk`
 
-## 向后兼容性
+## Known limitations
 
-- **完全向后兼容**：没有 `direction` 列的旧版 CSV 行为不变
-- `enrichment = FALSE` 计数模式仍可使用
-- `DGIdbr()` 所有已有参数签名未变
-
-## 依赖
-
-- 新增运行时依赖：ChEMBL REST API（`https://www.ebi.ac.uk/chembl/api/data`）
-- R 包依赖无变化（已有：httr, jsonlite, utils）
-- 如果网络使用 HTTP 代理且 ChEMBL 访问失败，设置环境变量：
-  ```bash
-  export NO_PROXY="www.ebi.ac.uk,ebi.ac.uk"
-  ```
-
-## 已知限制
-
-- ChEMBL 的药物机制覆盖不完整（如 METFORMIN 无机制数据），此类药物
-  的方向列会以 NA 填充
-- 某些靶点是非蛋白实体（如 CISPLATIN 靶向 DNA），无法解析为基因符号
-- R CMD check 已知警告（..Rcheck 目录、缺少 inst/doc）与 v1.2.0 一致
+- ChEMBL mechanism coverage is incomplete; drugs without mechanism data get
+  `NA` in direction columns (e.g. METFORMIN)
+- Some targets are non-protein entities (e.g. cisplatin targets DNA) and
+  cannot be resolved to a gene symbol

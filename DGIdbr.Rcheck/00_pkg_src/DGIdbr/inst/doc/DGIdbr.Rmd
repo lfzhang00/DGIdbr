@@ -270,6 +270,19 @@ structured list for programmatic use. If the drug or its mechanism data is
 not found in ChEMBL, a clear message is printed and the function returns
 `NULL`.
 
+You can filter indications by development phase using the `phase` parameter:
+
+```r
+# Show only FDA-approved / Phase 4 indications
+drug_card("ASPIRIN", phase = "approved")
+
+# Show only investigational indications (Phase 1-3)
+drug_card("ASPIRIN", phase = "trial")
+```
+
+The default `phase = "all"` shows everything, preserving backward
+compatibility with all existing calls.
+
 ### 6. This is hypothesis generation, not confirmation
 
 DGIdbr ranks drugs for **follow-up investigation**. Results should not be

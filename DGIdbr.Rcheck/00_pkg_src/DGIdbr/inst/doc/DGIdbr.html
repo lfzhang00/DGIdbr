@@ -12,7 +12,7 @@
 
 <meta name="author" content="L. Zhang" />
 
-<meta name="date" content="2026-07-19" />
+<meta name="date" content="2026-07-20" />
 
 <title>DGIdbr: Statistical Drug Prioritisation from Gene Sets</title>
 
@@ -342,7 +342,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <h1 class="title toc-ignore">DGIdbr: Statistical Drug Prioritisation
 from Gene Sets</h1>
 <h4 class="author">L. Zhang</h4>
-<h4 class="date">2026-07-19</h4>
+<h4 class="date">2026-07-20</h4>
 
 
 
@@ -761,6 +761,15 @@ clinical indications with development phases</p>
 as a structured list for programmatic use. If the drug or its mechanism
 data is not found in ChEMBL, a clear message is printed and the function
 returns <code>NULL</code>.</p>
+<p>You can filter indications by development phase using the
+<code>phase</code> parameter:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="co"># Show only FDA-approved / Phase 4 indications</span></span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="fu">drug_card</span>(<span class="st">&quot;ASPIRIN&quot;</span>, <span class="at">phase =</span> <span class="st">&quot;approved&quot;</span>)</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a><span class="co"># Show only investigational indications (Phase 1-3)</span></span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a><span class="fu">drug_card</span>(<span class="st">&quot;ASPIRIN&quot;</span>, <span class="at">phase =</span> <span class="st">&quot;trial&quot;</span>)</span></code></pre></div>
+<p>The default <code>phase = &quot;all&quot;</code> shows everything, preserving
+backward compatibility with all existing calls.</p>
 <div id="this-is-hypothesis-generation-not-confirmation-1" class="section level3">
 <h3>6. This is hypothesis generation, not confirmation</h3>
 <p>DGIdbr ranks drugs for <strong>follow-up investigation</strong>.

@@ -5,7 +5,7 @@
 # DGIdbr
 
 [![R CMD check](https://github.com/lfzhang00/DGIdbr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/lfzhang00/DGIdbr/actions)
-[![Version](https://img.shields.io/badge/version-1.3.0-blue)](https://github.com/lfzhang00/DGIdbr)
+[![Version](https://img.shields.io/badge/version-1.3.1-blue)](https://github.com/lfzhang00/DGIdbr)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 **Statistically grounded drug prioritisation from gene sets.**
@@ -44,7 +44,7 @@ are in your gene set -- a **648x enrichment** over random expectation (FDR = 0.0
 - **Full backward compatibility** -- set `enrichment = FALSE` for the old
   counting-based behaviour
 
-### New in v1.3.0 -- ChEMBL integration
+### New in v1.3.1 -- ChEMBL integration
 - **Direction consistency scoring**: If your input CSV has a `direction` column
   (`up` / `down`), DGIdbr automatically queries the ChEMBL API for each drug's
   mechanism of action (inhibitor, activator, antagonist, etc.) and scores the
@@ -106,7 +106,7 @@ DGIdbr(
 DGIdbr(mode = "group", ..., enrichment = FALSE)
 ```
 
-### Drug card lookup (new in v1.3.0)
+### Drug card lookup (new in v1.3.1)
 
 Search a drug by name and get its targets, mechanism, and indications:
 
@@ -121,6 +121,10 @@ card <- drug_card("CISPLATIN")
 card$target_genes             # resolved gene symbols
 card$mechanisms$action_type   # e.g. "INHIBITOR"
 card$indications$disease      # clinical indications
+
+# Filter indications by development phase
+drug_card("ASPIRIN", phase = "approved")  # Phase 4 / approved only
+drug_card("ASPIRIN", phase = "trial")      # Phase 1-3 investigational only
 ```
 
 Example output:
@@ -247,14 +251,14 @@ See `vignette("DGIdbr")` for a full discussion with worked examples.
 ## Citation
 
 L. Zhang (2025). *DGIdbr: DGIdb gene set query helper.* R package version
-1.3.0. https://github.com/lfzhang00/DGIdbr
+1.3.1. https://github.com/lfzhang00/DGIdbr
 
 ```bibtex
 @manual{DGIdbr,
   author = {Zhang, L.},
   title  = {DGIdbr: DGIdb gene set query helper},
   year   = {2025},
-  version = {1.3.0},
+  version = {1.3.1},
   url    = {https://github.com/lfzhang00/DGIdbr}
 }
 ```
@@ -269,6 +273,7 @@ All future releases will only be published under the academic profile.
 
 | Version | New functions | Key changes |
 |---------|---------------|-------------|
+| **1.3.1** | `drug_card(phase=)` | Added `phase` parameter to `drug_card()` for filtering indications by development stage (`"all"`, `"approved"`, `"trial"`). |
 | **1.3.0** | `drug_card()` | ChEMBL integration: direction consistency scoring, drug card lookup, automatic direction columns (`n_with_direction_data`, `n_direction_consistent`, `direction_ratio`). Internal: `chembl_map_drug_to_molecule()`, `chembl_fetch_mechanisms()`, `chembl_target_to_gene()`, `chembl_fetch_indications()`, `classify_action_direction()`, `compute_direction_consistency()`. |
 | **1.2.0** | — | Hypergeometric enrichment test with FDR correction, enrichment ratio, dynamic background calibration. Internal: `fetch_drug_target_counts()`, `fetch_druggable_gene_count()`, `compute_drug_enrichment()`. |
 | **1.1.0** | — | Subtype mode, FDA approval filter, grouped output directory structure. |

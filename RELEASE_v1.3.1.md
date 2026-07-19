@@ -1,9 +1,24 @@
-# DGIdbr v1.3.0 — ChEMBL Integration: Direction Scoring + Drug Card
+# DGIdbr v1.3.1 — Drug Card Phase Filter + ChEMBL Integration
 
 ## Highlights
 
-**v1.3.0** integrates the ChEMBL API as a first-class data source, enabling two
-new capabilities with zero user configuration:
+**v1.3.1** builds on the ChEMBL integration with a new phase filter for
+indications, plus all the foundational work from v1.3.0.
+
+### v1.3.1 — Drug card phase filter
+
+`drug_card()` gains a `phase` parameter to filter indications by development
+stage:
+
+```r
+drug_card("ASPIRIN")                              # all 49 indications
+drug_card("ASPIRIN", phase = "approved")           # Phase 4 / approved only
+drug_card("ASPIRIN", phase = "trial")              # Phase 1-3 investigational
+```
+
+### v1.3.0 — ChEMBL Integration (first release)
+
+Two new capabilities with zero user configuration:
 
 1. **Direction consistency scoring** (automatic) — when your input CSV has a
    `direction` column, DGIdbr automatically queries ChEMBL for each drug's
@@ -16,11 +31,11 @@ new capabilities with zero user configuration:
 
 ## What's new
 
-### New exported function
+### New / updated functions
 
 | Function | Description |
 |----------|-------------|
-| `drug_card(drug_name, phase)` | Look up a drug: returns a structured list with `$target_genes`, `$mechanisms`, `$indications`, and prints a human-readable summary card. `phase` accepts `"all"` (default), `"approved"`, or `"trial"`. |
+| `drug_card(drug_name, phase)` | **Updated.** `phase` parameter (`"all"`, `"approved"`, `"trial"`) filters indications by development stage. Default `"all"`. |
 
 ### Automatic direction scoring
 
@@ -43,7 +58,7 @@ new capabilities with zero user configuration:
 | `classify_action_direction()` | Map action types (INHIBITOR, AGONIST, …) to suppress/enhance |
 | `compute_direction_consistency()` | Core scoring function for direction consistency |
 
-### Bug fixes
+### Bug fixes (v1.3.0)
 
 - Fixed drug name lookup: replaced broken `/drug.json?name__in=` with
   `/molecule.json?pref_name__in=` (the drug endpoint's `name` field is always
@@ -58,7 +73,7 @@ new capabilities with zero user configuration:
 
 - `README.md` / `README_zh.md` fully updated: new features, environment
   variables, direction scoring explanation, version history table
-- Vignette updated with Drug Card Lookup section
+- Vignette updated with Drug Card Lookup section and `phase` parameter
 - All man pages regenerated via roxygen2
 
 ## Migration notes
@@ -69,6 +84,8 @@ new capabilities with zero user configuration:
 - `DGIdbr()` function signature is unchanged — no new parameters to learn
 - Direction scoring is **automatic** when a `direction` column is present;
   if ChEMBL is unreachable, direction columns are silently filled with `NA`
+- `drug_card(phase = "all")` is the default — all existing `drug_card()` calls
+  continue to work unchanged
 
 ## Installation
 
@@ -85,16 +102,16 @@ library(DGIdbr)
 # Gene-set driven drug prioritisation (direction scoring automatic)
 DGIdbr(mode = "group", base_tables = ".", group_filename = "group.csv")
 
-# Drug card lookup
-card <- drug_card("ASPIRIN")
+# Drug card lookup with phase filter
+card <- drug_card("ASPIRIN", phase = "approved")
 card$target_genes           # "PTGS2"
 card$mechanisms$action_type # "INHIBITOR"
-card$indications            # 49 indications with phases
+card$indications$disease    # 5 approved indications
 ```
 
 ## Dependencies
 
-- New runtime dependency: ChEMBL REST API (`https://www.ebi.ac.uk/chembl/api/data`)
+- ChEMBL REST API (`https://www.ebi.ac.uk/chembl/api/data`)
 - No new R package dependencies (httr, jsonlite, utils — unchanged)
 - Behind an HTTP proxy? Set `NO_PROXY=www.ebi.ac.uk,ebi.ac.uk`
 

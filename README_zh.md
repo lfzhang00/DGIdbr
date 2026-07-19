@@ -5,7 +5,7 @@
 # DGIdbr
 
 [![R CMD check](https://github.com/lancelotzhang0124/DGIdbr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/lancelotzhang0124/DGIdbr/actions)
-[![Version](https://img.shields.io/badge/version-1.3.0-blue)](https://github.com/lancelotzhang0124/DGIdbr)
+[![Version](https://img.shields.io/badge/version-1.3.1-blue)](https://github.com/lfzhang00/DGIdbr)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 **基于统计检验的药物优先排序工具。**
@@ -113,6 +113,10 @@ card <- drug_card("CISPLATIN")
 card$target_genes             # 解析后的基因符号
 card$mechanisms$action_type   # 例如 "INHIBITOR"
 card$indications$disease      # 临床适应症
+
+# 按临床阶段筛选适应症
+drug_card("ASPIRIN", phase = "approved")  # 仅已批准的
+drug_card("ASPIRIN", phase = "trial")      # 仅临床试验中的
 ```
 
 输出示例：
@@ -230,14 +234,14 @@ export NO_PROXY="www.ebi.ac.uk,ebi.ac.uk"
 ## 引用
 
 L. Zhang (2025). *DGIdbr: DGIdb gene set query helper.* R package version
-1.3.0. https://github.com/lfzhang00/DGIdbr
+1.3.1. https://github.com/lfzhang00/DGIdbr
 
 ```bibtex
 @manual{DGIdbr,
   author = {Zhang, L.},
   title  = {DGIdbr: DGIdb gene set query helper},
   year   = {2025},
-  version = {1.3.0},
+  version = {1.3.1},
   url    = {https://github.com/lfzhang00/DGIdbr}
 }
 ```
@@ -252,6 +256,7 @@ L. Zhang (2025). *DGIdbr: DGIdb gene set query helper.* R package version
 
 | 版本 | 新增公开函数 | 主要变更 |
 |------|-------------|---------|
+| **1.3.1** | `drug_card(phase=)` | 新增 `phase` 参数：按临床阶段筛选适应症（`"all"`、`"approved"`、`"trial"`）。 |
 | **1.3.0** | `drug_card()` | ChEMBL 集成：方向一致性评分、药物卡片查询、输出自动增加 `n_with_direction_data` / `n_direction_consistent` / `direction_ratio`。内部新增 `chembl_map_drug_to_molecule()`、`chembl_fetch_mechanisms()`、`chembl_target_to_gene()`、`chembl_fetch_indications()`、`classify_action_direction()`、`compute_direction_consistency()`。 |
 | **1.2.0** | — | 超几何富集检验 + FDR 校正、富集倍数、动态背景校准。内部新增 `fetch_drug_target_counts()`、`fetch_druggable_gene_count()`、`compute_drug_enrichment()`。 |
 | **1.1.0** | — | 新增亚型模式、FDA 批准过滤、分组的输出目录结构。 |

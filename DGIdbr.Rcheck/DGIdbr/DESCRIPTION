@@ -1,10 +1,10 @@
 Package: DGIdbr
 Type: Package
 Title: DGIdb Gene Set Query Helper
-Version: 1.3.0
-Authors@R: person("L.", "Zhang", email = "zhanglingfeng@whu.edu.cn", role = c("aut", "cre"))
+Version: 1.3.1
+Authors@R: person("L.", "Zhang", email = "lingfeng.zhang2@mail.mcgill.ca", role = c("aut", "cre"))
 Author: L. Zhang
-Maintainer: L. Zhang <zhanglingfeng@whu.edu.cn>
+Maintainer: L. Zhang <lingfeng.zhang2@mail.mcgill.ca>
 Description: Statistically grounded drug prioritisation from gene sets. Queries DGIdb via GraphQL and ranks drugs by hypergeometric enrichment with FDR correction — not by naïve hit counting.
 License: MIT
 Encoding: UTF-8
@@ -14,5 +14,5 @@ Suggests: knitr, rmarkdown
 VignetteBuilder: knitr
 RoxygenNote: 7.3.3
 NeedsCompilation: no
-Packaged: 2026-07-19 12:36:15 UTC; lfzhang
-Built: R 4.4.3; ; 2026-07-19 12:36:27 UTC; unix
+Packaged: 2026-07-19 17:49:33 UTC; lfzhang
+Built: R 4.4.3; ; 2026-07-19 17:49:36 UTC; unix

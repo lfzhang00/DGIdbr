@@ -15,7 +15,7 @@ Set environment variable \code{DGIDB_URL} to override the default GraphQL
 endpoint.
 }
 \author{
-\strong{Maintainer}: L. Zhang \email{zhanglingfeng@whu.edu.cn}
+\strong{Maintainer}: L. Zhang \email{lingfeng.zhang2@mail.mcgill.ca}
 
 }
 \keyword{internal}
