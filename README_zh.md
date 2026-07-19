@@ -159,6 +159,19 @@ L. Zhang (2025). *DGIdbr: DGIdb gene set query helper.* R package version
 }
 ```
 
+## 维护说明
+
+本项目最初由我的个人 GitHub 账号开发并维护：
+
+https://github.com/lancelotzhang0124/DGIdbr
+
+为更好地区分个人与学术相关工作，后续科研软件开发及项目维护已迁移至我的学术 GitHub 账号：
+
+https://github.com/lfzhang00
+
+未来的版本发布、功能更新及持续维护将通过该学术账号进行。
+
+
 ## 许可证
 
 MIT。详见 [LICENSE](LICENSE)。
