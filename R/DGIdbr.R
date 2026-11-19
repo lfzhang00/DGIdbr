@@ -132,7 +132,7 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE,
           gene = g$name,
           drug = it$drug$name,
           drug_concept_id = it$drug$conceptId,
-          interaction_score = it$interactionScore,
+          interaction_score = if (length(it$interactionScore)) it$interactionScore else NA_real_,
           interaction_types = paste(types[!is.na(types)], collapse = ";"),
           sources = if (length(sources)) paste(sources, collapse = ";") else NA_character_,
           approved = if (length(approval)) approval else NA,
@@ -156,7 +156,12 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE,
     agg <- stats::aggregate(
       interaction_score ~ drug + drug_concept_id + key,
       data = df,
-      FUN = function(x) c(total = sum(x, na.rm = TRUE), max = max(x, na.rm = TRUE))
+      na.action = stats::na.pass,
+      FUN = function(x) {
+        scored <- x[!is.na(x)]
+        if (!length(scored)) return(c(total = NA_real_, max = NA_real_))
+        c(total = sum(scored), max = max(scored))
+      }
     )
     scores_mat <- agg$interaction_score
     agg$total_score <- scores_mat[, "total"]

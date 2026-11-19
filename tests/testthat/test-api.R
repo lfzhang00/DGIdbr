@@ -67,3 +67,24 @@ test_that("mechanism pagination retries a failed batch and follows next", {
   expect_identical(second$target_chembl_id, c("T1", "T2"))
   expect_equal(urls[c(2, 4)], rep("https://www.ebi.ac.uk/chembl/api/data/mechanism.json?offset=1", 2))
 })
+
+test_that("interactions without scores remain in raw and aggregated hits", {
+  item <- function(drug, score) {
+    list(drug = list(name = drug, conceptId = drug, approved = FALSE),
+         interactionScore = score, interactionTypes = list(), sources = list())
+  }
+  nodes <- list(list(name = "SIRT5", interactions = list(item("A", NULL), item("B", NULL))),
+                list(name = "TFAM", interactions = list(item("B", 3))))
+  json <- jsonlite::toJSON(list(data = list(genes = list(nodes = nodes))),
+                           auto_unbox = TRUE, null = "null")
+  local_mocked_bindings(POST = function(...) response(as.character(json)), .package = "httr")
+  out <- tempfile()
+  run_gene_set("sample", c("SIRT5", "TFAM"), out, approve = FALSE, enrichment = FALSE)
+  raw <- read.csv(file.path(out, "dgidb_raw.csv"))
+  hits <- read.csv(file.path(out, "dgidb_hits.csv"))
+  expect_equal(sum(is.na(raw$interaction_score)), 2L)
+  expect_identical(hits$drug, c("B", "A"))
+  expect_equal(hits$gene_count, c(2, 1))
+  expect_equal(hits$total_score, c(3, NA))
+  expect_equal(hits$max_score, c(3, NA))
+})
