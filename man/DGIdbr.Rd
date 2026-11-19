@@ -12,10 +12,13 @@ DGIdbr(
   subtype_filename = "subtype.csv",
   approve = TRUE,
   enrichment = TRUE,
-  background_N = NULL
+  background_N = NULL,
+  direction = TRUE
 )
 }
 \arguments{
+\item{direction}{Run ChEMBL direction scoring when direction data are supplied (default TRUE). Set FALSE to skip ChEMBL while preserving gene-set grouping.}
+
 \item{mode}{"group" or "subtype"}
 
 \item{base_tables}{Input directory for tables}

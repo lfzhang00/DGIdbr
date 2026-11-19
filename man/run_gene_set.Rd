@@ -11,10 +11,13 @@ run_gene_set(
   approve = TRUE,
   enrichment = TRUE,
   background_N = NULL,
-  gene_direction = NULL
+  gene_direction = NULL,
+  direction = TRUE
 )
 }
 \arguments{
+\item{direction}{Run ChEMBL direction scoring when direction data are supplied (default TRUE). Set FALSE to skip ChEMBL while preserving gene-set grouping.}
+
 \item{label}{Label for the gene set (used in logs/output paths)}
 
 \item{genes}{Character vector of gene symbols}

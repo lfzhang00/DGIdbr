@@ -8,7 +8,8 @@ run_gene_sets(
   gene_sets,
   approve = TRUE,
   enrichment = TRUE,
-  background_N = NULL
+  background_N = NULL,
+  direction = TRUE
 )
 }
 \description{

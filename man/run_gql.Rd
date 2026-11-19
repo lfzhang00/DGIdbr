@@ -4,7 +4,7 @@
 \alias{run_gql}
 \title{Run a GraphQL POST request and parse JSON}
 \usage{
-run_gql(query, variables = NULL, timeout_sec = 20)
+run_gql(query, variables = NULL, timeout_sec = getOption("DGIdbr.timeout", 120))
 }
 \description{
 Run a GraphQL POST request and parse JSON

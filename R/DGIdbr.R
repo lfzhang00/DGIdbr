@@ -5,15 +5,41 @@ endpoint <- "https://dgidb.org/api/graphql"
 
 #' Run a GraphQL POST request and parse JSON
 #' @keywords internal
-run_gql <- function(query, variables = NULL, timeout_sec = 20) {
-  resp <- httr::POST(
-    url    = Sys.getenv("DGIDB_URL", endpoint),
-    body   = list(query = query, variables = variables),
-    encode = "json",
-    httr::timeout(timeout_sec)
-  )
+run_gql <- function(query, variables = NULL, timeout_sec = getOption("DGIdbr.timeout", 120)) {
+  if (!is.numeric(timeout_sec) || length(timeout_sec) != 1L ||
+      !is.finite(timeout_sec) || timeout_sec <= 0) {
+    stop("DGIdbr.timeout must be a positive number of seconds.", call. = FALSE)
+  }
+  transient_errors <- c("curl_error_operation_timedout", "curl_error_couldnt_connect",
+                        "curl_error_couldnt_resolve_host", "curl_error_couldnt_resolve_proxy",
+                        "curl_error_recv_error", "curl_error_send_error", "curl_error_partial_file",
+                        "curl_error_got_nothing", "curl_error_http2", "curl_error_http2_stream",
+                        "curl_error_ssl_connect_error")
+  for (attempt in seq_len(3L)) {
+    resp <- tryCatch(httr::POST(
+      url = Sys.getenv("DGIDB_URL", endpoint),
+      body = list(query = query, variables = variables), encode = "json",
+      httr::timeout(timeout_sec), httr::config(connecttimeout_ms = ceiling(1000 * timeout_sec))
+    ), curl_error = function(e) e)
+    delay <- 2^(attempt - 1L)
+    if (inherits(resp, "error")) {
+      if (attempt == 3L || !inherits(resp, transient_errors)) stop(resp)
+      reason <- conditionMessage(resp)
+    } else {
+      status <- httr::status_code(resp)
+      if (attempt == 3L || !status %in% c(408L, 429L, 500L, 502L, 503L, 504L)) break
+      reason <- paste("HTTP", status)
+      header <- httr::headers(resp)[["retry-after"]]
+      if (!is.null(header)) {
+        seconds <- suppressWarnings(as.numeric(header))
+        if (is.na(seconds)) seconds <- as.numeric(httr::parse_http_date(header)) - as.numeric(Sys.time())
+        if (is.finite(seconds)) delay <- max(delay, seconds)
+      }
+    }
+    message("DGIdb request failed (", reason, "). Retry ", attempt, "/2 in ", delay, " s.")
+    Sys.sleep(delay)
+  }
 
-  status <- httr::status_code(resp)
   text_resp <- httr::content(resp, as = "text", encoding = "UTF-8")
   if (status != 200L) stop("DGIdb HTTP ", status, call. = FALSE)
   parsed <- tryCatch(jsonlite::fromJSON(text_resp, simplifyVector = TRUE),
@@ -35,7 +61,7 @@ run_gql <- function(query, variables = NULL, timeout_sec = 20) {
 }
 
 # Collect name-filtered connections without exceeding the requested page size.
-dgidb_named_nodes <- function(field, values, selection, timeout_sec) {
+dgidb_named_nodes <- function(field, values, selection, timeout_sec = getOption("DGIdbr.timeout", 120)) {
   result <- list()
   for (batch in split(values, ceiling(seq_along(values) / 100L))) {
     after <- "null"
@@ -65,6 +91,7 @@ dgidb_named_nodes <- function(field, values, selection, timeout_sec) {
 
 #' Run DGIdb query for one gene set and write CSV outputs
 #'
+#' @param direction Run ChEMBL direction scoring when direction data are supplied (default TRUE). Set FALSE to skip ChEMBL while preserving gene-set grouping.
 #' @param label Label for the gene set (used in logs/output paths)
 #' @param genes Character vector of gene symbols
 #' @param out_dir Output directory; created if missing
@@ -85,14 +112,17 @@ dgidb_named_nodes <- function(field, values, selection, timeout_sec) {
 #' @export
 run_gene_set <- function(label, genes, out_dir, approve = TRUE,
                          enrichment = TRUE, background_N = NULL,
-                         gene_direction = NULL) {
+                         gene_direction = NULL, direction = TRUE) {
+  if (!is.logical(direction) || length(direction) != 1L || is.na(direction)) {
+    stop("direction must be TRUE or FALSE.", call. = FALSE)
+  }
   genes <- toupper(trimws(genes))
   genes <- unique(genes[!is.na(genes) & nzchar(genes)])
   if (length(genes) == 0) {
     cat(label, ": no genes, skipped.\n\n")
     return(invisible())
   }
-  if (length(gene_direction)) {
+  if (direction && length(gene_direction)) {
     direction_names <- toupper(trimws(names(gene_direction)))
     gene_direction <- stats::setNames(tolower(trimws(gene_direction)), direction_names)
   }
@@ -104,7 +134,7 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE,
         interactionTypes { type }
         interactionScore
         sources { sourceDbName }
-      }", timeout_sec = 20)
+      }")
   cat(label, ": matched gene records:", length(nodes), "\n")
 
   rows <- list()
@@ -211,19 +241,17 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE,
     agg <- agg[order(-agg$gene_count, -agg$total_score, -agg$max_score), ]
   }
 
-  # ---- Direction consistency analysis ----
-  if (!is.null(gene_direction) && length(gene_direction) > 0 && nrow(agg) > 0) {
-    dir_result <- compute_direction_consistency(agg, df, gene_direction)
-    agg <- dir_result$agg
-    df  <- dir_result$raw
-  }
-
-  # ---- Write outputs ----
   dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
   out_file <- file.path(out_dir, "dgidb_hits.csv")
   out_raw <- file.path(out_dir, "dgidb_raw.csv")
-  utils::write.csv(agg, out_file, row.names = FALSE)
-  utils::write.csv(df, out_raw, row.names = FALSE)
+  write_result_tables(agg, df, out_file, out_raw)
+
+  if (direction && length(gene_direction) > 0 && nrow(agg) > 0) {
+    dir_result <- compute_direction_consistency(agg, df, gene_direction)
+    agg <- dir_result$agg
+    df <- dir_result$raw
+    write_result_tables(agg, df, out_file, out_raw)
+  }
 
   cat("==", label, "aggregated drug hits ==\n")
   cat("Total candidate drugs:", nrow(agg), "\n")
@@ -238,6 +266,22 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE,
     print(utils::head(agg[, c("drug", "gene_count", "total_score", "max_score")], 10))
   }
   cat("\nFiles written to:\n -", out_file, "\n -", out_raw, "\n\n")
+}
+
+# Serialize both tables before replacing either checkpoint. Deferring interrupts
+# across the two renames keeps a user interrupt from publishing half an update.
+write_result_tables <- function(hits, raw, hits_path, raw_path) {
+  paths <- c(hits_path, raw_path)
+  staged <- tempfile("dgidbr-", tmpdir = dirname(hits_path), fileext = c("-hits.csv", "-raw.csv"))
+  on.exit(unlink(staged), add = TRUE)
+  utils::write.csv(hits, staged[1], row.names = FALSE)
+  utils::write.csv(raw, staged[2], row.names = FALSE)
+  suspendInterrupts({
+    for (i in seq_along(paths)) {
+      if (!file.rename(staged[i], paths[i])) stop("Could not publish ", paths[i], call. = FALSE)
+    }
+  })
+  invisible(NULL)
 }
 
 #' Read genes from CSV, optionally filtered by direction
@@ -332,13 +376,15 @@ build_gene_sets <- function(mode = c("group", "subtype"),
 
 #' Run a list of gene sets
 #' @keywords internal
-run_gene_sets <- function(gene_sets, approve = TRUE, enrichment = TRUE, background_N = NULL) {
+run_gene_sets <- function(gene_sets, approve = TRUE, enrichment = TRUE, background_N = NULL,
+                          direction = TRUE) {
   failures <- character()
   for (gs in gene_sets) {
     tryCatch(
       run_gene_set(gs$label, gs$genes, gs$out,
                    approve = approve, enrichment = enrichment,
-                   background_N = background_N, gene_direction = gs$gene_direction),
+                   background_N = background_N, gene_direction = gs$gene_direction,
+                   direction = direction),
       error = function(e) {
         detail <- paste(gs$label, conditionMessage(e), sep = ": ")
         message(detail)
@@ -354,6 +400,7 @@ run_gene_sets <- function(gene_sets, approve = TRUE, enrichment = TRUE, backgrou
 #' @param mode "group" or "subtype"
 #' @param base_tables Input directory for tables
 #' @param base_out Output base directory
+#' @param direction Run ChEMBL direction scoring when direction data are supplied (default TRUE). Set FALSE to skip ChEMBL while preserving gene-set grouping.
 #' @param group_filename Group file name (default group.csv)
 #' @param subtype_filename Subtype file name (default subtype.csv)
 #' @param approve Logical; if TRUE keep only FDA approved drugs. If FALSE, keep all.
@@ -386,7 +433,7 @@ DGIdbr <- function(mode = "group",
                    subtype_filename = "subtype.csv",
                    approve = TRUE,
                    enrichment = TRUE,
-                   background_N = NULL) {
+                   background_N = NULL, direction = TRUE) {
 
   gs <- build_gene_sets(
     mode = mode,
@@ -400,7 +447,7 @@ DGIdbr <- function(mode = "group",
     return(invisible(NULL))
   }
   run_gene_sets(gs, approve = approve,
-                enrichment = enrichment, background_N = background_N)
+                enrichment = enrichment, background_N = background_N, direction = direction)
   cat("DGIdb run finished.\n")
   invisible(NULL)
 }

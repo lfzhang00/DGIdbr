@@ -108,3 +108,8 @@ L. Zhang (2025). *DGIdbr: DGIdb gene set query helper.* R package version 1.3.1.
 ## 许可证
 
 MIT。详见 [LICENSE](LICENSE)。
+
+DGIdb 每批最多查询 100 个名称，每次请求的连接和总超时默认均为 120 秒。
+可用 `options(DGIdbr.timeout = 180)` 调整。遇到临时网络错误或服务繁忙时最多重试两次。
+使用 `DGIdbr(..., direction = FALSE)` 可保留上下调分组并跳过 ChEMBL。
+启用方向评分时，每组的原始互作和药物汇总 CSV 会在 ChEMBL 查询前写出，评分完成后再更新。

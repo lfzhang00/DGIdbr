@@ -27,7 +27,7 @@ fetch_druggable_gene_count <- function() {
   }
 
   q <- "{ genes(first: 1) { totalCount } }"
-  resp <- tryCatch(run_gql(q, timeout_sec = 15), error = function(e) e)
+  resp <- tryCatch(run_gql(q), error = function(e) e)
 
   if (!inherits(resp, "error") &&
       resp$status == 200 &&
@@ -64,8 +64,7 @@ fetch_drug_target_counts <- function(drug_names, chunk = 150) {
   results <- mget(cached, envir = cache)
   to_query <- setdiff(drug_names, cached)
   for (batch in split(to_query, ceiling(seq_along(to_query) / chunk))) {
-    nd <- tryCatch(dgidb_named_nodes("drugs", batch, "name conceptId interactions { gene { name } }",
-                                     timeout_sec = 60),
+    nd <- tryCatch(dgidb_named_nodes("drugs", batch, "name conceptId interactions { gene { name } }"),
                    error = function(e) {
                      warning("Cannot fetch target counts: ", conditionMessage(e), call. = FALSE)
                      list()

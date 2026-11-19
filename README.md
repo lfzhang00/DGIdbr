@@ -112,3 +112,9 @@ L. Zhang (2025). *DGIdbr: DGIdb gene set query helper.* R package version 1.3.1.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+DGIdb requests use batches of at most 100 names and a 120-second connection and
+total timeout per attempt. Set `options(DGIdbr.timeout = 180)` to change it.
+Transient failures are retried up to twice. Use `DGIdbr(..., direction = FALSE)`
+to keep up/down groups and skip ChEMBL. With scoring enabled, each group's raw
+and summary CSV files are saved before ChEMBL starts and updated after scoring.
