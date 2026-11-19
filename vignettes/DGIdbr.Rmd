@@ -82,7 +82,7 @@ DGIdbr(
   base_tables = "path/to/tables",
   group_filename = "group.csv",
   base_out   = "path/to/output",
-  approve    = TRUE,       # FDA-approved drugs only
+  approve    = TRUE,       # restrict hits to drugs marked approved by DGIdb
   enrichment = TRUE         # default: hypergeometric test + FDR
 )
 ```
@@ -124,7 +124,7 @@ The main output file `dgidb_hits.csv` contains these columns:
 | `max_score` | Highest single interaction score |
 | `genes` | Which of your genes interact with this drug |
 | `sources` | Source databases supporting the interactions |
-| `approved` | FDA approval status |
+| `approved` | Approval flag reported by DGIdb |
 | `enrichment_ratio` | $(k/n) / (m/N)$ — fold enrichment over random expectation |
 | `p_value` | Raw hypergeometric p-value |
 | `fdr` | Benjamini–Hochberg adjusted p-value |
@@ -269,7 +269,7 @@ not found in ChEMBL, a clear message is printed and the function returns
 You can filter indications by development phase using the `phase` parameter:
 
 ```r
-# Show only FDA-approved / Phase 4 indications
+# Show only indications marked as phase 4 in ChEMBL
 drug_card("ASPIRIN", phase = "approved")
 
 # Show only investigational indications (Phase 1-3)

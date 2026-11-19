@@ -1,11 +1,8 @@
-citHeader("To cite DGIdbr in publications, please use:")
-
-citEntry(
-  entry       = "Misc",
+bibentry(
+  bibtype     = "Manual",
   title       = "DGIdbr: DGIdb gene set query helper",
   author      = person("L.", "Zhang"),
-  year        = "2025",
-  note        = "R package version 1.3.1",
-  url         = "https://github.com/lfzhang00/DGIdbr",
-  textVersion = "L. Zhang (2025). DGIdbr: DGIdb gene set query helper. R package version 1.3.1. https://github.com/lfzhang00/DGIdbr"
+  year        = substr(meta$Date, 1L, 4L),
+  note        = paste("R package version", meta$Version),
+  url         = "https://github.com/lfzhang00/DGIdbr"
 )

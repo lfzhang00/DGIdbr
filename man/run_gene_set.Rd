@@ -24,7 +24,7 @@ run_gene_set(
 
 \item{out_dir}{Output directory; created if missing}
 
-\item{approve}{Logical; if TRUE keep only FDA approved drugs; if FALSE keep all.}
+\item{approve}{Logical; restrict the hits table to drugs marked approved by DGIdb. The raw table is unfiltered.}
 
 \item{enrichment}{Logical; if TRUE compute hypergeometric enrichment
 p-values and FDR. Requires additional API calls per drug. Default TRUE.}

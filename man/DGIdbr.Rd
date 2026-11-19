@@ -29,7 +29,7 @@ DGIdbr(
 
 \item{subtype_filename}{Subtype file name (default subtype.csv)}
 
-\item{approve}{Logical; if TRUE keep only FDA approved drugs. If FALSE, keep all.}
+\item{approve}{Logical; restrict the hits table to drugs marked approved by DGIdb. The raw table is unfiltered.}
 
 \item{enrichment}{Logical; if TRUE compute hypergeometric enrichment
 p-values and FDR for each drug. Default TRUE.}

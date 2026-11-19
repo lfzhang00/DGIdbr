@@ -47,6 +47,15 @@ test_that("known approval and nested types survive API parsing", {
   }
 })
 
+test_that("approval filtering rejects non-boolean inputs and server flags", {
+  out <- tempfile()
+  expect_error(run_gene_set("sample", "SIRT5", out, approve = "TRUE"), "approve must be")
+  payload <- '{"data":{"genes":{"nodes":[{"name":"SIRT5","interactions":[{"drug":{"name":"A","conceptId":"a","approved":1},"interactionScore":1}]}]}}}'
+  local_mocked_bindings(POST = function(...) response(payload), .package = "httr")
+  expect_error(run_gene_set("sample", "SIRT5", out), "invalid drug approval")
+  expect_false(file.exists(file.path(out, "dgidb_hits.csv")))
+})
+
 test_that("mechanism pagination retries a failed batch and follows next", {
   urls <- character()
   fail <- TRUE

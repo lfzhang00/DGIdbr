@@ -5,7 +5,7 @@
 # DGIdbr
 
 [![R CMD check](https://github.com/lfzhang00/DGIdbr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/lfzhang00/DGIdbr/actions)
-[![Version](https://img.shields.io/badge/version-1.3.1-blue)](https://github.com/lfzhang00/DGIdbr)
+[![Version](https://img.shields.io/badge/version-1.3.2-blue)](https://github.com/lfzhang00/DGIdbr/releases/tag/1.3.2)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 查询 DGIdb 药物-基因互作数据库，通过超几何富集检验对药物排序。
@@ -14,10 +14,23 @@
 ## 安装
 
 ```r
-remotes::install_github("lfzhang00/DGIdbr")
+remotes::install_github("lfzhang00/DGIdbr", ref = "1.3.2")
+library(DGIdbr)
 ```
 
 > 注意：原仓库 `lancelotzhang0124/DGIdbr` 已归档，不再维护。
+
+## 如何判断 1.3.2 的查询结果
+
+```r
+run_gene_set("SIRT5", "SIRT5", out_dir = "sirt5", approve = FALSE, enrichment = FALSE)
+read.csv("sirt5/dgidb_raw.csv")[c("drug", "interaction_types", "approved")]
+```
+
+- 主查询遇到 DNS、HTTP、GraphQL 或 JSON 解析错误时会向 R 调用方报错，不会将失败写成零命中。批处理会继续其他基因集，最后汇总失败项。建议每次使用新输出目录：失败不会删除旧结果。
+- 查询成功但没有互作时，两张 CSV 都只有表头。`dgidb_raw.csv` 保留全部互作和数据库报告的类型（如 `inhibitor`）；`approve = TRUE` 只筛选 `dgidb_hits.csv`，仅保留 DGIdb 明确标记 `approved = TRUE` 的药物。因此，原始表非空但汇总表为空，也可能是有效筛选结果。
+- DGIdb 每批最多查询 100 个名称，临时错误最多重试两次。每次请求默认超时 120 秒，可用 `options(DGIdbr.timeout = 180)` 调整。ChEMBL 机制查询按返回的 `next` 链接翻页，未取完的批次不会缓存为完整结果。
+- 启用方向评分时，两张 CSV 在 ChEMBL 评分前写出，完成后更新。设 `direction = FALSE` 可跳过评分，同时保留上下调分组。
 
 ## 函数说明
 
@@ -61,7 +74,8 @@ DGIdbr(mode = "group", ..., enrichment = FALSE)
 | `base_out` | — | 输出目录 |
 | `group_filename` | `"group.csv"` | 分组模式输入文件 |
 | `subtype_filename` | `"subtype.csv"` | 亚型模式输入文件 |
-| `approve` | `TRUE` | 仅保留 FDA 已批准药物 |
+| `approve` | `TRUE` | 汇总表仅保留 DGIdb 明确标记为已获批的药物 |
+| `direction` | `TRUE` | 有上下调标签时计算方向一致性 |
 | `enrichment` | `TRUE` | 超几何富集检验 + FDR |
 | `background_N` | `NULL` | 背景基因数（`NULL` 自动获取）|
 
@@ -93,23 +107,18 @@ drug_card("ASPIRIN", phase = "trial")       # 仅试验中
 
 ## 引用
 
-L. Zhang (2025). *DGIdbr: DGIdb gene set query helper.* R package version 1.3.1. https://github.com/lfzhang00/DGIdbr
+L. Zhang (2026). *DGIdbr: DGIdb gene set query helper.* R package version 1.3.2. https://github.com/lfzhang00/DGIdbr
 
 ```bibtex
 @manual{DGIdbr,
   author = {Zhang, L.},
   title  = {DGIdbr: DGIdb gene set query helper},
-  year   = {2025},
-  version = {1.3.1},
+  year   = {2026},
+  version = {1.3.2},
   url    = {https://github.com/lfzhang00/DGIdbr}
 }
 ```
 
 ## 许可证
 
-MIT。详见 [LICENSE](LICENSE)。
-
-DGIdb 每批最多查询 100 个名称，每次请求的连接和总超时默认均为 120 秒。
-可用 `options(DGIdbr.timeout = 180)` 调整。遇到临时网络错误或服务繁忙时最多重试两次。
-使用 `DGIdbr(..., direction = FALSE)` 可保留上下调分组并跳过 ChEMBL。
-启用方向评分时，每组的原始互作和药物汇总 CSV 会在 ChEMBL 查询前写出，评分完成后再更新。
+MIT。详见 [LICENSE.md](LICENSE.md)。

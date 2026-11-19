@@ -95,7 +95,7 @@ dgidb_named_nodes <- function(field, values, selection, timeout_sec = getOption(
 #' @param label Label for the gene set (used in logs/output paths)
 #' @param genes Character vector of gene symbols
 #' @param out_dir Output directory; created if missing
-#' @param approve Logical; if TRUE keep only FDA approved drugs; if FALSE keep all.
+#' @param approve Logical; restrict the hits table to drugs marked approved by DGIdb. The raw table is unfiltered.
 #' @param enrichment Logical; if TRUE compute hypergeometric enrichment
 #'   p-values and FDR. Requires additional API calls per drug. Default TRUE.
 #' @param background_N Integer or NULL; number of background genes for
@@ -113,6 +113,9 @@ dgidb_named_nodes <- function(field, values, selection, timeout_sec = getOption(
 run_gene_set <- function(label, genes, out_dir, approve = TRUE,
                          enrichment = TRUE, background_N = NULL,
                          gene_direction = NULL, direction = TRUE) {
+  if (!is.logical(approve) || length(approve) != 1L || is.na(approve)) {
+    stop("approve must be TRUE or FALSE.", call. = FALSE)
+  }
   if (!is.logical(direction) || length(direction) != 1L || is.na(direction)) {
     stop("direction must be TRUE or FALSE.", call. = FALSE)
   }
@@ -158,6 +161,9 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE,
           stop(label, ": missing drug approval field", call. = FALSE)
         }
         approval <- unlist(it$drug$approved, use.names = FALSE)
+        if (length(approval) && (!is.logical(approval) || length(approval) != 1L)) {
+          stop(label, ": invalid drug approval field", call. = FALSE)
+        }
         rows[[length(rows) + 1]] <- data.frame(
           gene = g$name,
           drug = it$drug$name,
@@ -403,7 +409,7 @@ run_gene_sets <- function(gene_sets, approve = TRUE, enrichment = TRUE, backgrou
 #' @param direction Run ChEMBL direction scoring when direction data are supplied (default TRUE). Set FALSE to skip ChEMBL while preserving gene-set grouping.
 #' @param group_filename Group file name (default group.csv)
 #' @param subtype_filename Subtype file name (default subtype.csv)
-#' @param approve Logical; if TRUE keep only FDA approved drugs. If FALSE, keep all.
+#' @param approve Logical; restrict the hits table to drugs marked approved by DGIdb. The raw table is unfiltered.
 #' @param enrichment Logical; if TRUE compute hypergeometric enrichment
 #'   p-values and FDR for each drug. Default TRUE.
 #' @param background_N Integer; number of background genes for

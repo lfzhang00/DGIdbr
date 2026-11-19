@@ -5,7 +5,7 @@
 # DGIdbr
 
 [![R CMD check](https://github.com/lfzhang00/DGIdbr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/lfzhang00/DGIdbr/actions)
-[![Version](https://img.shields.io/badge/version-1.3.1-blue)](https://github.com/lfzhang00/DGIdbr)
+[![Version](https://img.shields.io/badge/version-1.3.2-blue)](https://github.com/lfzhang00/DGIdbr/releases/tag/1.3.2)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 Query DGIdb drug-gene interactions and rank drugs by hypergeometric enrichment.
@@ -15,10 +15,23 @@ clinical indications.
 ## Installation
 
 ```r
-remotes::install_github("lfzhang00/DGIdbr")
+remotes::install_github("lfzhang00/DGIdbr", ref = "1.3.2")
+library(DGIdbr)
 ```
 
 > Note: the legacy repository `lancelotzhang0124/DGIdbr` is archived and no longer maintained.
+
+## Reading results in 1.3.2
+
+```r
+run_gene_set("SIRT5", "SIRT5", out_dir = "sirt5", approve = FALSE, enrichment = FALSE)
+read.csv("sirt5/dgidb_raw.csv")[c("drug", "interaction_types", "approved")]
+```
+
+- A failed primary query (DNS, HTTP, GraphQL, or invalid JSON) raises an R error, not an empty result. Batch runs identify failed sets after processing the others. Use a fresh output directory: a failed query does not remove files from earlier runs.
+- A successful query with no interactions writes two header-only CSVs. `dgidb_raw.csv` retains all interactions and their reported types (e.g., `inhibitor`); `approve = TRUE` filters only `dgidb_hits.csv`, keeping explicit DGIdb `approved = TRUE` values. An empty hits table with a nonempty raw table can therefore be a valid filter result.
+- DGIdb reads use batches of up to 100 names and retry transient failures up to twice. Set `options(DGIdbr.timeout = 180)` to override the default 120 seconds per attempt. ChEMBL mechanism queries follow the returned `next` link; incomplete batches are not cached as complete.
+- With direction scoring enabled, both CSVs are written before ChEMBL scoring and updated afterward. Set `direction = FALSE` to skip scoring without changing the up/down groups.
 
 ## Functions
 
@@ -65,7 +78,8 @@ ChEMBL action directions for a drug–gene pair are reported as missing.
 | `base_out` | — | Output directory |
 | `group_filename` | `"group.csv"` | Group-mode input file |
 | `subtype_filename` | `"subtype.csv"` | Subtype-mode input file |
-| `approve` | `TRUE` | Only FDA-approved drugs |
+| `approve` | `TRUE` | Restrict the hits table to drugs marked approved by DGIdb |
+| `direction` | `TRUE` | Score direction when up/down labels are available |
 | `enrichment` | `TRUE` | Hypergeometric test with FDR |
 | `background_N` | `NULL` | Background gene count (auto-detect if `NULL`) |
 
@@ -97,24 +111,18 @@ drug_card("ASPIRIN", phase = "trial")       # investigational only
 
 ## Citation
 
-L. Zhang (2025). *DGIdbr: DGIdb gene set query helper.* R package version 1.3.1. https://github.com/lfzhang00/DGIdbr
+L. Zhang (2026). *DGIdbr: DGIdb gene set query helper.* R package version 1.3.2. https://github.com/lfzhang00/DGIdbr
 
 ```bibtex
 @manual{DGIdbr,
   author = {Zhang, L.},
   title  = {DGIdbr: DGIdb gene set query helper},
-  year   = {2025},
-  version = {1.3.1},
+  year   = {2026},
+  version = {1.3.2},
   url    = {https://github.com/lfzhang00/DGIdbr}
 }
 ```
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
-
-DGIdb requests use batches of at most 100 names and a 120-second connection and
-total timeout per attempt. Set `options(DGIdbr.timeout = 180)` to change it.
-Transient failures are retried up to twice. Use `DGIdbr(..., direction = FALSE)`
-to keep up/down groups and skip ChEMBL. With scoring enabled, each group's raw
-and summary CSV files are saved before ChEMBL starts and updated after scoring.
+MIT. See [LICENSE.md](LICENSE.md).
