@@ -150,40 +150,34 @@ chembl_fetch_mechanisms <- function(mol_ids, chunk = 50) {
     batch  <- to_query[i:min(i + chunk - 1, length(to_query))]
     q      <- paste(batch, collapse = ",")
     accum  <- list()
-    page   <- 1
-    max_pages <- 5  # safety valve
-
+    url <- paste0(CHEMBL_API_BASE, "/mechanism.json?molecule_chembl_id__in=", q,
+                  "&limit=1000")
+    seen <- character()
     repeat {
-      url <- paste0(CHEMBL_API_BASE, "/mechanism.json",
-                    "?molecule_chembl_id__in=", q,
-                    "&limit=1000&page=", page)
-
-      doc <- tryCatch(
-        jsonlite::fromJSON(
-          httr::content(httr::GET(url, httr::timeout(30)),
-                         "text", encoding = "UTF-8"),
-          simplifyVector = TRUE
-        ),
-        error = function(e) NULL
-      )
-
-      if (is.null(doc) || is.null(doc$mechanisms)) break
-      mechs <- doc$mechanisms
-      if (!is.data.frame(mechs) || nrow(mechs) == 0) break
-
-      accum[[length(accum) + 1]] <- mechs
-
-      # Pagination: check if there's a "next" page in page_meta
-      # (ChEMBL uses `page_meta`, NOT `page_metadata`)
-      meta <- doc$page_meta
-      if (!is.list(meta) || is.null(meta[["next"]])) {
-        # No "next" URL -> last page (or single-page result)
+      if (url %in% seen) {
+        warning("Repeated ChEMBL pagination URL", call. = FALSE)
         break
       }
-      if (page >= max_pages) break
-      page <- page + 1
+      seen <- c(seen, url)
+      doc <- tryCatch({
+        resp <- httr::GET(url, httr::timeout(30))
+        httr::stop_for_status(resp)
+        jsonlite::fromJSON(httr::content(resp, "text", encoding = "UTF-8"))
+      }, error = function(e) {
+        warning("ChEMBL mechanisms: ", conditionMessage(e), call. = FALSE)
+        NULL
+      })
+      if (is.null(doc$mechanisms) || is.null(doc$page_meta)) break
+      if (NROW(doc$mechanisms)) accum[[length(accum) + 1L]] <- doc$mechanisms
+      next_url <- doc$page_meta[["next"]]
+      if (is.null(next_url)) {
+        url <- NULL
+        break
+      }
+      url <- xml2::url_absolute(next_url, url)
     }
-
+    # Retry incomplete batches on the next call instead of caching partial results.
+    if (!is.null(url)) next
     if (length(accum) == 0) {
       for (mid in batch) .cache_mechanisms[[mid]] <- data.frame()
       next
@@ -210,6 +204,7 @@ chembl_fetch_mechanisms <- function(mol_ids, chunk = 50) {
     }
   }
 
+  if (!length(cached_list)) return(data.frame())
   do.call(rbind, cached_list)
 }
 

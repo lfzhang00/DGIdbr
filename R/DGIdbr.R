@@ -1,13 +1,13 @@
 #' DGIdb GraphQL endpoint
 #'
 #' Uses env var `DGIDB_URL` if set, otherwise defaults to public endpoint.
-endpoint <- Sys.getenv("DGIDB_URL", "https://dgidb.org/api/graphql")
+endpoint <- "https://dgidb.org/api/graphql"
 
 #' Run a GraphQL POST request and parse JSON
 #' @keywords internal
 run_gql <- function(query, variables = NULL, timeout_sec = 20) {
   resp <- httr::POST(
-    url    = endpoint,
+    url    = Sys.getenv("DGIDB_URL", endpoint),
     body   = list(query = query, variables = variables),
     encode = "json",
     httr::timeout(timeout_sec)
@@ -15,8 +15,17 @@ run_gql <- function(query, variables = NULL, timeout_sec = 20) {
 
   status <- httr::status_code(resp)
   text_resp <- httr::content(resp, as = "text", encoding = "UTF-8")
+  if (status != 200L) stop("DGIdb HTTP ", status, call. = FALSE)
   parsed <- tryCatch(jsonlite::fromJSON(text_resp, simplifyVector = TRUE),
-                     error = function(e) list())
+                     error = function(e) stop("Invalid DGIdb JSON: ", conditionMessage(e),
+                                              call. = FALSE))
+  if (!is.list(parsed) || !any(c("data", "errors") %in% names(parsed))) {
+    stop("Invalid DGIdb response: expected data or errors", call. = FALSE)
+  }
+  if (length(parsed$errors)) {
+    stop("DGIdb GraphQL error: ", paste(parsed$errors$message, collapse = "; "),
+         call. = FALSE)
+  }
 
   list(
     status = status,
@@ -65,7 +74,7 @@ print_result <- function(title, res, node_path) {
   cat("OK. Nodes:", n_nodes, "\n")
 
   show_name <- NULL
-  if (is.data.frame(nodes) && "name" %in% names(nodes)) {
+  if (is.data.frame(nodes) && nrow(nodes) > 0L && "name" %in% names(nodes)) {
     show_name <- nodes$name[[1]]
   } else if (is.list(nodes) && length(nodes) > 0 && !is.null(nodes[[1]]$name)) {
     show_name <- nodes[[1]]$name
@@ -108,19 +117,14 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE,
   cat("== Running set:", label, "Genes:", length(genes), "==\n")
 
   q <- sprintf(
-    "\n    {\n      genes(names: [%s]) {\n        nodes {\n          name\n          interactions {\n            drug { name conceptId }\n            interactionTypes { type }\n            interactionScore\n            sources { sourceDbName }\n          }\n        }\n      }\n    }\n    ",
+    "\n    {\n      genes(names: [%s]) {\n        nodes {\n          name\n          interactions {\n            drug { name conceptId approved }\n            interactionTypes { type }\n            interactionScore\n            sources { sourceDbName }\n          }\n        }\n      }\n    }\n    ",
     gene_args
   )
 
-  res <- tryCatch(run_gql(q), error = function(e) e)
-  print_result(paste(label, "Gene list -> Drug interactions"), res, c("genes", "nodes"))
-
-  if (inherits(res, "error") || res$status != 200 || !is.null(res$errors)) {
-    cat(label, ": aggregation skipped due to request error.\n\n")
-    return(invisible())
-  }
-
+  res <- run_gql(q)
   nodes <- res$data$genes$nodes
+  if (!is.list(nodes)) stop(label, ": missing or invalid genes.nodes", call. = FALSE)
+  print_result(paste(label, "Gene list -> Drug interactions"), res, c("genes", "nodes"))
   if (is.data.frame(nodes)) {
     nodes <- lapply(seq_len(nrow(nodes)), function(i) {
       list(name = nodes$name[[i]], interactions = nodes$interactions[[i]])
@@ -131,113 +135,76 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE,
   if (!is.null(nodes) && length(nodes) > 0) {
     for (g in nodes) {
       inters <- g$interactions
-      if (is.null(inters)) next
+      if (!is.list(inters)) stop(label, ": invalid gene interactions", call. = FALSE)
       if (is.data.frame(inters)) {
-        inters <- lapply(seq_len(nrow(inters)), function(i) as.list(inters[i, ]))
+        inters <- lapply(seq_len(nrow(inters)), function(i) {
+          list(drug = inters$drug[i, , drop = FALSE],
+               interactionScore = inters$interactionScore[[i]],
+               interactionTypes = inters$interactionTypes[[i]],
+               sources = inters$sources[[i]])
+        })
       }
       for (it in inters) {
-        srcs <- it$sources
-        if (is.data.frame(srcs)) {
-          srcs_vec <- srcs$sourceDbName
-        } else if (is.list(srcs)) {
-          srcs_vec <- sapply(srcs, function(x) {
-            if (!is.null(x$sourceDbName)) x$sourceDbName else NA_character_
-          })
-        } else {
-          srcs_vec <- NA_character_
+        types <- unlist(it$interactionTypes, use.names = FALSE)
+        sources <- unlist(it$sources, use.names = FALSE)
+        sources <- sort(unique(sources[!is.na(sources) & nzchar(sources)]))
+        if (isTRUE(approve) && !"approved" %in% names(it$drug)) {
+          stop(label, ": missing drug approval field", call. = FALSE)
         }
-        srcs_vec <- srcs_vec[!is.na(srcs_vec) & nzchar(srcs_vec)]
-        src_str <- if (length(srcs_vec)) paste(sort(unique(srcs_vec)), collapse = ";") else NA_character_
+        approval <- unlist(it$drug$approved, use.names = FALSE)
         rows[[length(rows) + 1]] <- data.frame(
           gene = g$name,
           drug = it$drug$name,
           drug_concept_id = it$drug$conceptId,
           interaction_score = it$interactionScore,
-          interaction_types = paste(it$interactionTypes$type, collapse = ";"),
-          sources = src_str,
+          interaction_types = paste(types[!is.na(types)], collapse = ";"),
+          sources = if (length(sources)) paste(sources, collapse = ";") else NA_character_,
+          approved = if (length(approval)) approval else NA,
           stringsAsFactors = FALSE
         )
       }
     }
   }
 
-  if (length(rows) == 0) {
-    cat(label, ": No gene-drug interactions returned.\n\n")
-    return(invisible())
-  }
+  if (length(rows) == 0L) {
+    cat(label, ": No gene-drug interactions returned.\n")
+    df <- data.frame(gene = character(), drug = character(), drug_concept_id = character(),
+                     interaction_score = numeric(), interaction_types = character(),
+                     sources = character(), approved = logical(), key = character())
+    agg <- data.frame(drug = character(), drug_concept_id = character(), key = character(),
+                      total_score = numeric(), max_score = numeric(), gene_count = integer(),
+                      genes = character(), sources = character(), approved = logical())
+  } else {
+    df <- do.call(rbind, rows)
+    df$key <- paste(df$drug, df$drug_concept_id, sep = "|")
+    agg <- stats::aggregate(
+      interaction_score ~ drug + drug_concept_id + key,
+      data = df,
+      FUN = function(x) c(total = sum(x, na.rm = TRUE), max = max(x, na.rm = TRUE))
+    )
+    scores_mat <- agg$interaction_score
+    agg$total_score <- scores_mat[, "total"]
+    agg$max_score <- scores_mat[, "max"]
+    agg$interaction_score <- NULL
 
-  df <- do.call(rbind, rows)
-  df$key <- paste(df$drug, df$drug_concept_id, sep = "|")
-  agg <- aggregate(
-    interaction_score ~ drug + drug_concept_id + key,
-    data = df,
-    FUN = function(x) c(total = sum(x, na.rm = TRUE), max = max(x, na.rm = TRUE))
-  )
-  scores_mat <- agg$interaction_score
-  agg$total_score <- scores_mat[, "total"]
-  agg$max_score <- scores_mat[, "max"]
-  agg$interaction_score <- NULL
-
-  genes_by_key <- tapply(df$gene, df$key, function(x) sort(unique(x)))
-  agg$gene_count <- sapply(agg$key, function(k) length(genes_by_key[[k]]))
-  agg$genes <- sapply(agg$key, function(k) paste(genes_by_key[[k]], collapse = ";"))
-  collapse_sources <- function(vals) {
-    vals <- vals[!is.na(vals) & nzchar(vals)]
-    if (length(vals) == 0) return(NA_character_)
-    vals <- unlist(strsplit(vals, ";"))
-    vals <- vals[!is.na(vals) & nzchar(vals)]
-    if (length(vals) == 0) return(NA_character_)
-    paste(sort(unique(vals)), collapse = ";")
-  }
-  unique_keys <- unique(df$key)
-  sources_by_key <- sapply(unique_keys, function(k) collapse_sources(df$sources[df$key == k]), USE.NAMES = TRUE)
-  agg$sources <- sources_by_key[agg$key]
-  agg <- agg[order(-agg$gene_count, -agg$total_score, -agg$max_score), ]
-
-  fetch_drug_meta <- function(drug_names, chunk = 150) {
-    metas <- list()
-    n <- length(drug_names)
-    if (n == 0) return(metas)
-    for (i in seq(1, n, by = chunk)) {
-      sub <- drug_names[i:min(i + chunk - 1, n)]
-      sub_arg <- paste(sprintf('\"%s\"', sub), collapse = ", ")
-      q_meta <- sprintf(
-        "\n        {\n          drugs(names: [%s]) {\n            nodes {\n              name\n              conceptId\n              approved\n              drugApprovalRatings { rating source { sourceDbName } }\n            }\n          }\n        }\n        ",
-        sub_arg
-      )
-      resm <- tryCatch(run_gql(q_meta, timeout_sec = 40), error = function(e) e)
-      if (!inherits(resm, "error") && resm$status == 200 && is.null(resm$errors)) {
-        nd <- resm$data$drugs$nodes
-        if (is.null(nd)) next
-        if (is.data.frame(nd)) {
-          nd <- lapply(seq_len(nrow(nd)), function(j) {
-            list(
-              name = nd$name[[j]],
-              conceptId = nd$conceptId[[j]],
-              approved = nd$approved[[j]]
-            )
-          })
-        }
-        for (d in nd) {
-          metas[[length(metas) + 1]] <- data.frame(
-            drug = d$name,
-            drug_concept_id = d$conceptId,
-            approved = d$approved,
-            stringsAsFactors = FALSE
-          )
-        }
-      }
+    genes_by_key <- tapply(df$gene, df$key, function(x) sort(unique(x)))
+    agg$gene_count <- sapply(agg$key, function(k) length(genes_by_key[[k]]))
+    agg$genes <- sapply(agg$key, function(k) paste(genes_by_key[[k]], collapse = ";"))
+    collapse_sources <- function(vals) {
+      vals <- vals[!is.na(vals) & nzchar(vals)]
+      if (length(vals) == 0) return(NA_character_)
+      vals <- unlist(strsplit(vals, ";"))
+      vals <- vals[!is.na(vals) & nzchar(vals)]
+      if (length(vals) == 0) return(NA_character_)
+      paste(sort(unique(vals)), collapse = ";")
     }
-    if (length(metas) == 0) return(NULL)
-    unique(do.call(rbind, metas))
+    unique_keys <- unique(df$key)
+    sources_by_key <- sapply(unique_keys, function(k) collapse_sources(df$sources[df$key == k]), USE.NAMES = TRUE)
+    agg$sources <- sources_by_key[agg$key]
+    agg$approved <- df$approved[match(agg$key, df$key)]
   }
 
-  drug_meta <- fetch_drug_meta(unique(agg$drug))
-  if (!is.null(drug_meta)) {
-    agg <- merge(agg, drug_meta, by = c("drug", "drug_concept_id"), all.x = TRUE, sort = FALSE)
-  }
-
-  if ("approved" %in% names(agg) && isTRUE(approve)) {
+  if (isTRUE(approve)) {
     approved_rows <- !is.na(agg$approved) & agg$approved
     agg <- agg[approved_rows, ]
     cat(label, ": Filtered to approved drugs only. Remaining:", nrow(agg), "\n")
@@ -273,8 +240,8 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE,
   dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
   out_file <- file.path(out_dir, "dgidb_hits.csv")
   out_raw <- file.path(out_dir, "dgidb_raw.csv")
-  write.csv(agg, out_file, row.names = FALSE)
-  write.csv(df, out_raw, row.names = FALSE)
+  utils::write.csv(agg, out_file, row.names = FALSE)
+  utils::write.csv(df, out_raw, row.names = FALSE)
 
   cat("==", label, "aggregated drug hits ==\n")
   cat("Total candidate drugs:", nrow(agg), "\n")
@@ -294,7 +261,7 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE,
 #' Read genes from CSV, optionally filtered by direction
 #' @keywords internal
 read_genes_with_dir <- function(file, direction_value = NULL) {
-  df <- read.csv(file, stringsAsFactors = FALSE)
+  df <- utils::read.csv(file, stringsAsFactors = FALSE)
   if (!"gene" %in% names(df)) stop("Column 'gene' not found in ", file)
   if (!is.null(direction_value) && "direction" %in% names(df)) {
     df <- df[df$direction == direction_value, ]
@@ -327,7 +294,7 @@ build_gene_sets <- function(mode = c("group", "subtype"),
   if (mode == "group") {
     group_file <- file.path(base_tables, group_filename)
     if (file.exists(group_file)) {
-      df_all <- read.csv(group_file, stringsAsFactors = FALSE)
+      df_all <- utils::read.csv(group_file, stringsAsFactors = FALSE)
       gene_dir_all <- if ("direction" %in% names(df_all)) {
         stats::setNames(tolower(trimws(df_all$direction)), df_all$gene)
       } else NULL
@@ -364,7 +331,7 @@ build_gene_sets <- function(mode = c("group", "subtype"),
     return(gene_sets)
   }
 
-  df_sub <- read.csv(subtype_file, stringsAsFactors = FALSE)
+  df_sub <- utils::read.csv(subtype_file, stringsAsFactors = FALSE)
   needed_cols <- c("gene", "direction", "subtype")
   if (!all(needed_cols %in% names(df_sub))) {
     stop("Subtype file must contain columns: ", paste(needed_cols, collapse = ", "))
@@ -405,12 +372,20 @@ build_gene_sets <- function(mode = c("group", "subtype"),
 #' Run a list of gene sets
 #' @keywords internal
 run_gene_sets <- function(gene_sets, approve = TRUE, enrichment = TRUE, background_N = NULL) {
+  failures <- character()
   for (gs in gene_sets) {
-    run_gene_set(gs$label, gs$genes, gs$out,
-                 approve = approve, enrichment = enrichment,
-                 background_N = background_N,
-                 gene_direction = gs$gene_direction %||% NULL)
+    tryCatch(
+      run_gene_set(gs$label, gs$genes, gs$out,
+                   approve = approve, enrichment = enrichment,
+                   background_N = background_N, gene_direction = gs$gene_direction),
+      error = function(e) {
+        detail <- paste(gs$label, conditionMessage(e), sep = ": ")
+        message(detail)
+        failures <<- c(failures, detail)
+      }
+    )
   }
+  if (length(failures)) stop(paste(failures, collapse = "\n"), call. = FALSE)
 }
 
 #' Main entry point for DGIdbr package
