@@ -21,6 +21,18 @@ CHEMBL_API_BASE <- "https://www.ebi.ac.uk/chembl/api/data"
 .cache_mechanisms <- new.env(parent = emptyenv())   # molecule_chembl_id -> mechanism data.frame
 .cache_target_gene <- new.env(parent = emptyenv())  # target_chembl_id -> gene symbol
 
+# Optional ChEMBL annotations can be retried after a transport or decoding failure.
+chembl_get_json <- function(url, query = NULL, timeout_sec = 20) {
+  tryCatch({
+    resp <- httr::GET(url, query = query, httr::timeout(timeout_sec))
+    httr::stop_for_status(resp)
+    jsonlite::fromJSON(httr::content(resp, "text", encoding = "UTF-8"))
+  }, error = function(e) {
+    warning("ChEMBL lookup failed: ", conditionMessage(e), call. = FALSE)
+    NULL
+  })
+}
+
 # =========================================================================
 # Step 1 -- Drug name -> ChEMBL molecule ID
 # =========================================================================
@@ -46,7 +58,10 @@ chembl_map_drug_to_molecule <- function(drug_names, chunk = 20) {
   out <- stats::setNames(vector("list", length(drug_names)), drug_names)
   to_query <- character(0)
   for (nm in drug_names) {
-    if (exists(nm, envir = .cache_mol_id, inherits = FALSE)) {
+    id <- toupper(trimws(nm))
+    if (grepl("^(CHEMBL:)?CHEMBL[0-9]+$", id)) {
+      out[[nm]] <- sub("^CHEMBL:", "", id)
+    } else if (exists(nm, envir = .cache_mol_id, inherits = FALSE)) {
       out[[nm]] <- .cache_mol_id[[nm]]
     } else {
       to_query <- c(to_query, nm)
@@ -59,51 +74,29 @@ chembl_map_drug_to_molecule <- function(drug_names, chunk = 20) {
   # data for pref_name and molecule_synonyms, unlike the drug endpoint.
   for (i in seq(1, length(to_query), by = chunk)) {
     batch <- to_query[i:min(i + chunk - 1, length(to_query))]
-    q <- paste(vapply(batch, utils::URLencode, character(1)), collapse = ",")
-    url  <- paste0(CHEMBL_API_BASE, "/molecule.json?pref_name__in=", q,
-                   "&limit=100")
-
-    doc <- tryCatch(
-      jsonlite::fromJSON(
-        httr::content(httr::GET(url, httr::timeout(20)),
-                       "text", encoding = "UTF-8"),
-        simplifyVector = TRUE
-      ),
-      error = function(e) NULL
-    )
-
-    if (is.null(doc) || is.null(doc$molecules) ||
-        !is.data.frame(doc$molecules) || nrow(doc$molecules) == 0) {
-      for (nm in batch) { .cache_mol_id[[nm]] <- NULL; out[[nm]] <- NULL }
-      next
-    }
-
+    url <- paste0(CHEMBL_API_BASE, "/molecule.json")
+    query <- list(pref_name__in = paste(toupper(batch), collapse = ","), limit = 100)
+    doc <- chembl_get_json(url, query)
+    if (is.null(doc$molecules)) next
     molecules <- doc$molecules
-    # Build lookup: lowercase pref_name -> molecule_chembl_id
-    name_map <- stats::setNames(molecules$molecule_chembl_id,
-                                tolower(molecules$pref_name))
-
     for (nm in batch) {
-      key <- tolower(nm)
-      if (key %in% names(name_map)) {
-        val <- name_map[[key]]
-        .cache_mol_id[[nm]] <- val
-        out[[nm]] <- val
-        next
+      ids <- character()
+      if (is.data.frame(molecules)) {
+        matches <- toupper(molecules$pref_name) %in% toupper(nm)
+        ids <- unique(molecules$molecule_chembl_id[matches])
       }
-      # Fallback: search molecule_synonyms
-      found <- FALSE
-      for (j in seq_len(nrow(molecules))) {
-        syns <- molecules$molecule_synonyms[[j]]
-        if (is.data.frame(syns) && "synonym" %in% names(syns) &&
-            any(key %in% tolower(syns$synonym))) {
-          .cache_mol_id[[nm]] <- molecules$molecule_chembl_id[j]
-          out[[nm]] <- molecules$molecule_chembl_id[j]
-          found <- TRUE
-          break
+      if (!length(ids)) {
+        # Two rows suffice to distinguish a unique synonym from an ambiguous one.
+        alias <- chembl_get_json(url, list(molecule_synonyms__molecule_synonym__iexact = nm,
+                                           limit = 2, only = "molecule_chembl_id"))
+        if (is.data.frame(alias$molecules) && is.null(alias$page_meta[["next"]])) {
+          ids <- unique(alias$molecules$molecule_chembl_id)
         }
       }
-      if (!found) { .cache_mol_id[[nm]] <- NULL; out[[nm]] <- NULL }
+      if (length(ids) == 1L && !is.na(ids) && nzchar(ids)) {
+        out[[nm]] <- ids
+        .cache_mol_id[[nm]] <- ids
+      }
     }
   }
 
@@ -238,31 +231,18 @@ chembl_target_to_gene <- function(target_ids) {
 
   for (tid in to_query) {
     url <- paste0(CHEMBL_API_BASE, "/target/", tid, ".json")
-    doc <- tryCatch(
-      jsonlite::fromJSON(
-        httr::content(httr::GET(url, httr::timeout(15)),
-                       "text", encoding = "UTF-8"),
-        simplifyVector = TRUE
-      ),
-      error = function(e) NULL
-    )
-
+    doc <- chembl_get_json(url, timeout_sec = 15)
+    if (is.null(doc) || is.null(doc$target_components)) next
     symbol <- NA_character_
-    if (!is.null(doc)) {
-      comps <- doc$target_components
-      if (is.data.frame(comps) && nrow(comps) > 0 &&
-          "target_component_synonyms" %in% names(comps)) {
-        for (k in seq_len(nrow(comps))) {
-          syns <- comps$target_component_synonyms[[k]]
-          if (is.data.frame(syns) && "component_synonym" %in% names(syns) &&
-              "syn_type" %in% names(syns)) {
-            gs <- syns$component_synonym[syns$syn_type == "GENE_SYMBOL"]
-            if (length(gs) > 0 && nzchar(gs[1])) {
-              symbol <- gs[1]
-              break
-            }
-          }
-        }
+    comps <- doc$target_components
+    # A complex-level mechanism does not establish a direction for its first subunit.
+    if (identical(doc$organism, "Homo sapiens") && is.data.frame(comps) &&
+        nrow(comps) == 1L && "target_component_synonyms" %in% names(comps)) {
+      syns <- comps$target_component_synonyms[[1]]
+      if (is.data.frame(syns)) {
+        gs <- unique(syns$component_synonym[syns$syn_type %in% "GENE_SYMBOL"])
+        gs <- gs[!is.na(gs) & nzchar(gs)]
+        if (length(gs) == 1L) symbol <- gs
       }
     }
 
@@ -452,7 +432,7 @@ compute_direction_consistency <- function(agg_df, raw_df, gene_direction) {
 
     for (dn in drug_names) {
       if (is.null(drug_target_action[[dn]])) drug_target_action[[dn]] <- list()
-      drug_target_action[[dn]][[gene]] <- dcat
+      drug_target_action[[dn]][[gene]] <- union(drug_target_action[[dn]][[gene]], dcat)
     }
   }
 
@@ -467,10 +447,10 @@ compute_direction_consistency <- function(agg_df, raw_df, gene_direction) {
     if (is.null(drug_target_action[[drug_name]])) next
 
     found_action <- drug_target_action[[drug_name]][[gene_name]]
-    if (is.null(found_action) || is.na(found_action)) next
+    if (length(found_action) != 1L) next
 
     gene_dir <- gene_direction[gene_name]
-    if (is.na(gene_dir)) next
+    if (!gene_dir %in% c("up", "down")) next
 
     if ((gene_dir == "up" && found_action == "suppress") ||
         (gene_dir == "down" && found_action == "enhance")) {
@@ -513,8 +493,10 @@ compute_direction_consistency <- function(agg_df, raw_df, gene_direction) {
     pmax(direction_stats$n_with_direction_data, 1)
 
   # Merge into agg_df
-  agg_df <- merge(agg_df, direction_stats,
-                  by = "drug", all.x = TRUE, sort = FALSE)
+  index <- match(agg_df$drug, direction_stats$drug)
+  agg_df$n_with_direction_data <- direction_stats$n_with_direction_data[index]
+  agg_df$n_direction_consistent <- direction_stats$n_direction_consistent[index]
+  agg_df$direction_ratio <- direction_stats$direction_ratio[index]
 
   n_with_data <- sum(agg_df$n_with_direction_data > 0, na.rm = TRUE)
   cat("  Drug direction data:",
@@ -599,16 +581,13 @@ chembl_fetch_indications <- function(mol_id, max_results = 50) {
   out <- ind[, present, drop = FALSE]
 
   # Normalise: prefer mesh_heading, fall back to efo_term
-  if ("mesh_heading" %in% names(out)) {
-    out$disease <- out$mesh_heading
-  } else if ("efo_term" %in% names(out)) {
-    out$disease <- out$efo_term
-  } else {
-    out$disease <- rep(NA_character_, nrow(out))
-  }
+  out$disease <- if ("mesh_heading" %in% names(out)) out$mesh_heading else NA_character_
+  missing <- is.na(out$disease) | !nzchar(out$disease)
+  if ("efo_term" %in% names(out)) out$disease[missing] <- out$efo_term[missing]
 
   # Round phase for display
   if ("max_phase_for_ind" %in% names(out)) {
+    out <- out[order(-as.numeric(out$max_phase_for_ind), na.last = TRUE), , drop = FALSE]
     phase <- as.numeric(out$max_phase_for_ind)
     out$phase_label <- ifelse(is.na(phase), "?",
                        ifelse(phase >= 4, "Approved",
@@ -648,7 +627,7 @@ chembl_fetch_indications <- function(mol_id, max_results = 50) {
 #' }
 drug_card <- function(drug_name, phase = c("all", "approved", "trial")) {
   phase <- match.arg(phase)
-  if (is.null(drug_name) || is.na(drug_name) || !nzchar(drug_name)) {
+  if (length(drug_name) != 1L || is.na(drug_name) || !nzchar(trimws(drug_name))) {
     stop("Please provide a drug name.")
   }
 
@@ -667,8 +646,7 @@ drug_card <- function(drug_name, phase = c("all", "approved", "trial")) {
   }
 
   # ---- Step 2: molecule info ----
-  url <- paste0(CHEMBL_API_BASE, "/molecule.json?pref_name__exact=",
-                utils::URLencode(drug_name, reserved = TRUE), "&limit=1")
+  url <- paste0(CHEMBL_API_BASE, "/molecule/", mol_id, ".json")
   doc <- tryCatch(
     jsonlite::fromJSON(
       httr::content(httr::GET(url, httr::timeout(15)),
@@ -679,8 +657,8 @@ drug_card <- function(drug_name, phase = c("all", "approved", "trial")) {
   )
 
   max_phase <- NA_integer_
-  if (!is.null(doc) && !is.null(doc$molecules) && nrow(doc$molecules) > 0) {
-    max_phase <- doc$molecules$max_phase[1]
+  if (length(doc$max_phase) == 1L) {
+    max_phase <- as.numeric(doc$max_phase)
   }
 
   cat("  + ChEMBL ID:", mol_id, "\n")
@@ -711,7 +689,7 @@ drug_card <- function(drug_name, phase = c("all", "approved", "trial")) {
         target_genes[tid]
       } else NA_character_
       gene_str <- if (!is.na(gene) && nzchar(gene)) sprintf(" (%s)", gene) else ""
-      moa <- mechs$mechanism_of_action[k]
+      moa <- (mechs$mechanism_of_action %||% NA_character_)[k]
       moa_str <- if (!is.na(moa) && nzchar(moa)) sprintf(" -- %s", moa) else ""
       action_str <- mechs$action_type[k]
       cat(sprintf("  * %s%s%s%s\n",

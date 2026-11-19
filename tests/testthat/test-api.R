@@ -1,9 +1,3 @@
-response <- function(text, status = 200L) {
-  structure(list(status_code = status, content = charToRaw(text),
-                 headers = list("content-type" = "application/json"), url = "https://test.invalid"),
-            class = "response")
-}
-
 test_that("API failures reach the caller and empty hits replace old results", {
   reply <- response("temporarily unavailable", 503L)
   local_mocked_bindings(POST = function(...) reply, .package = "httr")

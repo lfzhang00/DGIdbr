@@ -1,0 +1,11 @@
+^\.\.Rcheck$
+^DGIdbr\.Rcheck$
+^DGIdbr$
+^DGIdbr_.*\.tar\.gz$
+^DGIdbr\.pdf$
+^dgidb_(group|subtype)_out$
+^(group|subtype)\.csv$
+^test\.R$
+^\.github$
+^README_zh\.md$
+^LICENSE\.md$

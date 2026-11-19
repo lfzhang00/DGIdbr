@@ -2,16 +2,16 @@
 % Please edit documentation in R/stats.R
 \name{fetch_druggable_gene_count}
 \alias{fetch_druggable_gene_count}
-\title{Fetch the total number of druggable genes in DGIdb}
+\title{Fetch the total number of DGIdb gene records}
 \usage{
 fetch_druggable_gene_count()
 }
 \value{
-Integer; number of unique genes with drug interactions in DGIdb.
+Integer; number of gene records in DGIdb.
 }
 \description{
 Queries the DGIdb genes connection for its \code{totalCount}. This is the
-correct background N for the hypergeometric test — genes that have at least
-one documented drug interaction.  Result is cached in memory for the session.
+background size for all registered genes, including those without
+a documented drug interaction.  Result is cached in memory for the session.
 }
 \keyword{internal}

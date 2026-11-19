@@ -28,7 +28,7 @@ p-values and FDR. Requires additional API calls per drug. Default TRUE.}
 
 \item{background_N}{Integer or NULL; number of background genes for
 hypergeometric test. If NULL (default), automatically queries DGIdb
-for the total druggable gene count (~11665). Set a number to override.}
+for the total gene record count. Set a number to override.}
 
 \item{gene_direction}{Optional named character vector mapping gene symbols
 to \code{"up"} or \code{"down"}. When provided, ChEMBL is queried for

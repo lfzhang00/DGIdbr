@@ -13,7 +13,7 @@ compute_drug_enrichment(agg, n_genes_input, background_N = NULL)
 \item{n_genes_input}{Integer; number of genes in the input gene set.}
 
 \item{background_N}{Integer or NULL; total background gene count. If NULL
-(default), automatically queries DGIdb for the number of druggable genes.
+(default), automatically queries DGIdb for the number of DGIdb gene records.
 Set an explicit integer to override.}
 }
 \value{

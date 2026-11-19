@@ -34,55 +34,33 @@ run_gql <- function(query, variables = NULL, timeout_sec = 20) {
   )
 }
 
-#' Pretty-print a GraphQL response subset
-#' @keywords internal
-print_result <- function(title, res, node_path) {
-  cat("==", title, "==\n")
-
-  if (inherits(res, "error")) {
-    cat("Request error:", conditionMessage(res), "\n\n")
-    return(invisible())
-  }
-
-  if (res$status != 200) {
-    cat("HTTP status:", res$status, "\n\n")
-    return(invisible())
-  }
-
-  if (!is.null(res$errors)) {
-    cat("GraphQL errors:\n")
-    print(res$errors)
-    cat("\n")
-    return(invisible())
-  }
-
-  nodes <- res$data
-  for (k in node_path) {
-    if (is.null(nodes[[k]])) {
-      nodes <- NULL
-      break
+# Collect name-filtered connections without exceeding the requested page size.
+dgidb_named_nodes <- function(field, values, selection, timeout_sec) {
+  result <- list()
+  for (batch in split(values, ceiling(seq_along(values) / 100L))) {
+    after <- "null"
+    seen <- character()
+    repeat {
+      query <- sprintf("{ %s(names: %s, first: 100, after: %s) {
+                          nodes { %s } pageInfo { hasNextPage endCursor } } }",
+                       field, jsonlite::toJSON(batch), after, selection)
+      connection <- run_gql(query, timeout_sec = timeout_sec)$data[[field]]
+      nodes <- connection$nodes
+      if (!is.list(nodes)) stop("Missing or invalid ", field, ".nodes", call. = FALSE)
+      if (is.data.frame(nodes)) {
+        nodes <- lapply(seq_len(nrow(nodes)), function(i) lapply(nodes, `[[`, i))
+      }
+      result <- c(result, nodes)
+      if (!isTRUE(connection$pageInfo$hasNextPage)) break
+      cursor <- connection$pageInfo$endCursor
+      if (length(cursor) != 1L || is.na(cursor) || !nzchar(cursor) || cursor %in% seen) {
+        stop("Invalid pagination cursor for DGIdb ", field, call. = FALSE)
+      }
+      seen <- c(seen, cursor)
+      after <- jsonlite::toJSON(cursor, auto_unbox = TRUE)
     }
-    nodes <- nodes[[k]]
   }
-
-  if (is.null(nodes)) {
-    cat("No nodes found.\n\n")
-    return(invisible())
-  }
-
-  n_nodes <- if (is.data.frame(nodes)) nrow(nodes) else length(nodes)
-  cat("OK. Nodes:", n_nodes, "\n")
-
-  show_name <- NULL
-  if (is.data.frame(nodes) && nrow(nodes) > 0L && "name" %in% names(nodes)) {
-    show_name <- nodes$name[[1]]
-  } else if (is.list(nodes) && length(nodes) > 0 && !is.null(nodes[[1]]$name)) {
-    show_name <- nodes[[1]]$name
-  }
-  if (!is.null(show_name)) {
-    cat("Example name:", show_name, "\n")
-  }
-  cat("\n")
+  result
 }
 
 #' Run DGIdb query for one gene set and write CSV outputs
@@ -95,7 +73,7 @@ print_result <- function(title, res, node_path) {
 #'   p-values and FDR. Requires additional API calls per drug. Default TRUE.
 #' @param background_N Integer or NULL; number of background genes for
 #'   hypergeometric test. If NULL (default), automatically queries DGIdb
-#'   for the total druggable gene count (~11665). Set a number to override.
+#'   for the total gene record count. Set a number to override.
 #' @param gene_direction Optional named character vector mapping gene symbols
 #'   to \code{"up"} or \code{"down"}. When provided, ChEMBL is queried for
 #'   drug mechanism of action and the consistency between drug action direction
@@ -108,28 +86,26 @@ print_result <- function(title, res, node_path) {
 run_gene_set <- function(label, genes, out_dir, approve = TRUE,
                          enrichment = TRUE, background_N = NULL,
                          gene_direction = NULL) {
+  genes <- toupper(trimws(genes))
   genes <- unique(genes[!is.na(genes) & nzchar(genes)])
   if (length(genes) == 0) {
     cat(label, ": no genes, skipped.\n\n")
     return(invisible())
   }
-  gene_args <- paste(sprintf('\"%s\"', genes), collapse = ", ")
-  cat("== Running set:", label, "Genes:", length(genes), "==\n")
-
-  q <- sprintf(
-    "\n    {\n      genes(names: [%s]) {\n        nodes {\n          name\n          interactions {\n            drug { name conceptId approved }\n            interactionTypes { type }\n            interactionScore\n            sources { sourceDbName }\n          }\n        }\n      }\n    }\n    ",
-    gene_args
-  )
-
-  res <- run_gql(q)
-  nodes <- res$data$genes$nodes
-  if (!is.list(nodes)) stop(label, ": missing or invalid genes.nodes", call. = FALSE)
-  print_result(paste(label, "Gene list -> Drug interactions"), res, c("genes", "nodes"))
-  if (is.data.frame(nodes)) {
-    nodes <- lapply(seq_len(nrow(nodes)), function(i) {
-      list(name = nodes$name[[i]], interactions = nodes$interactions[[i]])
-    })
+  if (length(gene_direction)) {
+    direction_names <- toupper(trimws(names(gene_direction)))
+    gene_direction <- stats::setNames(tolower(trimws(gene_direction)), direction_names)
   }
+  cat("== Running set:", label, "Genes:", length(genes), "==\n")
+  nodes <- dgidb_named_nodes("genes", genes, "
+      name
+      interactions {
+        drug { name conceptId approved }
+        interactionTypes { type }
+        interactionScore
+        sources { sourceDbName }
+      }", timeout_sec = 20)
+  cat(label, ": matched gene records:", length(nodes), "\n")
 
   rows <- list()
   if (!is.null(nodes) && length(nodes) > 0) {
@@ -217,7 +193,8 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE,
     tgt <- fetch_drug_target_counts(drugs_to_query)
     if (!is.null(tgt)) {
       agg <- merge(agg, tgt, by = c("drug", "drug_concept_id"), all.x = TRUE, sort = FALSE)
-      agg <- compute_drug_enrichment(agg, n_genes_input = length(genes), background_N = background_N)
+      sample_n <- if (is.null(background_N)) length(unique(vapply(nodes, `[[`, character(1), "name"))) else length(genes)
+      agg <- compute_drug_enrichment(agg, n_genes_input = sample_n, background_N = background_N)
       # Sort by FDR ascending, then enrichment_ratio descending
       agg <- agg[order(agg$fdr, -agg$enrichment_ratio, na.last = TRUE), ]
       cat("Enrichment done. Drugs with FDR < 0.05:", sum(agg$fdr < 0.05, na.rm = TRUE), "\n")
@@ -261,12 +238,13 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE,
 #' Read genes from CSV, optionally filtered by direction
 #' @keywords internal
 read_genes_with_dir <- function(file, direction_value = NULL) {
-  df <- utils::read.csv(file, stringsAsFactors = FALSE)
-  if (!"gene" %in% names(df)) stop("Column 'gene' not found in ", file)
+  df <- if (is.data.frame(file)) file else utils::read.csv(file, stringsAsFactors = FALSE)
+  if (!"gene" %in% names(df)) stop("Missing gene column")
   if (!is.null(direction_value) && "direction" %in% names(df)) {
-    df <- df[df$direction == direction_value, ]
+    df <- df[tolower(trimws(df$direction)) %in% direction_value, , drop = FALSE]
   }
-  unique(df$gene[!is.na(df$gene) & nzchar(df$gene)])
+  genes <- toupper(trimws(df$gene))
+  unique(genes[!is.na(genes) & nzchar(genes)])
 }
 
 #' Build gene sets for a chosen mode
@@ -279,7 +257,7 @@ read_genes_with_dir <- function(file, direction_value = NULL) {
 #' @param mode "group" or "subtype"
 #' @param base_tables Directory containing input tables
 #' @param base_out Output base directory
-#' @param group_filename Case-control file name (needs gene/direction)
+#' @param group_filename Case-control file name (requires gene; direction is optional)
 #' @param subtype_filename Subtype file name (needs gene/direction/subtype)
 #' @return List of gene set lists (label, genes, gene_direction, out)
 #' @export
@@ -295,29 +273,13 @@ build_gene_sets <- function(mode = c("group", "subtype"),
     group_file <- file.path(base_tables, group_filename)
     if (file.exists(group_file)) {
       df_all <- utils::read.csv(group_file, stringsAsFactors = FALSE)
-      gene_dir_all <- if ("direction" %in% names(df_all)) {
-        stats::setNames(tolower(trimws(df_all$direction)), df_all$gene)
-      } else NULL
-
-      up_genes   <- read_genes_with_dir(group_file, "up")
-      down_genes <- read_genes_with_dir(group_file, "down")
-
-      gene_sets <- list(
-        list(
-          label = "group_up",
-          genes = up_genes,
-          gene_direction = if (!is.null(gene_dir_all))
-            gene_dir_all[intersect(names(gene_dir_all), up_genes)] else NULL,
-          out   = file.path(base_out, "dgidb_group", "up")
-        ),
-        list(
-          label = "group_down",
-          genes = down_genes,
-          gene_direction = if (!is.null(gene_dir_all))
-            gene_dir_all[intersect(names(gene_dir_all), down_genes)] else NULL,
-          out   = file.path(base_out, "dgidb_group", "down")
-        )
-      )
+      directions <- if ("direction" %in% names(df_all)) c("up", "down") else "all"
+      gene_sets <- lapply(directions, function(dir) {
+        genes <- read_genes_with_dir(df_all, dir)
+        list(label = paste0("group_", dir), genes = genes,
+             gene_direction = if (dir != "all") stats::setNames(rep(dir, length(genes)), genes),
+             out = file.path(base_out, "dgidb_group", dir))
+      })
     } else {
       cat("Warning: group file not found at", group_file, "- skipping group sets.\n")
     }
@@ -336,8 +298,8 @@ build_gene_sets <- function(mode = c("group", "subtype"),
   if (!all(needed_cols %in% names(df_sub))) {
     stop("Subtype file must contain columns: ", paste(needed_cols, collapse = ", "))
   }
-  df_sub$direction <- tolower(df_sub$direction)
-  df_sub$subtype <- as.character(df_sub$subtype)
+  df_sub$direction <- tolower(trimws(df_sub$direction))
+  df_sub$subtype <- trimws(as.character(df_sub$subtype))
 
   subtypes <- sort(unique(df_sub$subtype[!is.na(df_sub$subtype) & nzchar(df_sub$subtype)]))
   if (length(subtypes) == 0) {
@@ -348,15 +310,9 @@ build_gene_sets <- function(mode = c("group", "subtype"),
   for (st in subtypes) {
     sub_df <- df_sub[df_sub$subtype == st, ]
     for (dirv in c("up", "down")) {
-      genes <- sub_df$gene[sub_df$direction == dirv]
-      genes <- unique(genes[!is.na(genes) & nzchar(genes)])
+      genes <- read_genes_with_dir(sub_df, dirv)
       if (length(genes) == 0) next
-      # Build named direction vector for these genes
-      gd <- sub_df[sub_df$direction == dirv, ]
-      gd <- gd[!is.na(gd$gene) & nzchar(gd$gene), ]
-      gd_vec <- if (nrow(gd) > 0) {
-        stats::setNames(rep(dirv, length(unique(gd$gene))), unique(gd$gene))
-      } else NULL
+      gd_vec <- stats::setNames(rep(dirv, length(genes)), genes)
       gene_sets[[length(gene_sets) + 1]] <- list(
         label = sprintf("subtype_%s_%s", tolower(st), dirv),
         genes = genes,
@@ -399,7 +355,7 @@ run_gene_sets <- function(gene_sets, approve = TRUE, enrichment = TRUE, backgrou
 #' @param enrichment Logical; if TRUE compute hypergeometric enrichment
 #'   p-values and FDR for each drug. Default TRUE.
 #' @param background_N Integer; number of background genes for
-#'   hypergeometric test (default 20000).
+#'   hypergeometric test (default: current DGIdb gene count).
 #' @details
 #' \strong{Direction consistency scoring:} When the input CSV contains a
 #' \code{direction} column (values \code{"up"} / \code{"down"}), the package

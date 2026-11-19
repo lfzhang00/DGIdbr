@@ -54,8 +54,8 @@ Where:
 |--------|---------|
 | $k$ | Number of input genes that interact with this drug |
 | $m$ | Total number of genes this drug targets (from DGIdb) |
-| $n$ | Number of genes in your input gene set |
-| $N$ | Background: total druggable genes in DGIdb (~11,665) |
+| $n$ | Number of distinct matched input genes (all distinct input genes for an explicit background) |
+| $N$ | Number of registered DGIdb gene records or the user-specified background size |
 
 ### Enrichment ratio
 
@@ -186,22 +186,18 @@ that the enrichment framework is designed to surface.
 
 ## Choosing `background_N`
 
-The default (`NULL`) automatically queries DGIdb for the current count of
-druggable genes (~11,665 as of 2025). This is the recommended setting.
+With `background_N = NULL`, DGIdbr obtains the total number of registered gene
+records from DGIdb and counts the distinct matched input symbols as the sample.
+A missing background count leaves the enrichment statistics missing.
 
-You may override it if:
+With an explicit `background_N`, the sample includes all distinct input symbols.
+The package receives only a count and cannot recalculate each drug's target
+count in a custom universe. Use this option only when the target counts and the
+input genes refer to the same background. Increasing the background size alone
+can make a fixed overlap appear more significant.
 
-- You want a more conservative test → use larger N (e.g. 20000 for all
-  protein-coding genes)
-- You want to restrict to a specific gene universe → provide your own count
-
-```r
-# More conservative (all protein-coding genes)
-DGIdbr(..., background_N = 20000)
-
-# Auto-detect (recommended)
-DGIdbr(..., background_N = NULL)
-```
+The BH adjustment applies to the returned drug hits with usable statistics.
+It does not cover every drug in DGIdb.
 
 ## Important Caveats
 

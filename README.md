@@ -30,7 +30,7 @@ and ranks drugs by enrichment (not hit count). If the CSV has a `direction` colu
 output.
 
 ```r
-# Group mode: CSV needs columns gene, direction
+# Group mode: gene required, direction optional
 DGIdbr(mode = "group", base_tables = ".", group_filename = "group.csv",
        base_out = ".", approve = TRUE, enrichment = TRUE)
 
@@ -41,6 +41,12 @@ DGIdbr(mode = "subtype", base_tables = ".", subtype_filename = "subtype.csv",
 # Disable enrichment to fall back to counting
 DGIdbr(mode = "group", ..., enrichment = FALSE)
 ```
+
+A group CSV with only `gene` produces one result in `dgidb_group/all`. With a
+`direction` column, results remain in `up` and `down`. The automatic enrichment
+background counts DGIdb gene records and uses matched input symbols as the
+sample. Unavailable background counts leave enrichment statistics missing. An explicit `background_N` uses all distinct input symbols. Conflicting
+ChEMBL action directions for a drug–gene pair are reported as missing.
 
 #### Output: `dgidb_hits.csv`
 

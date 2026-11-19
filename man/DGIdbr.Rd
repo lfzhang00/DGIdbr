@@ -32,7 +32,7 @@ DGIdbr(
 p-values and FDR for each drug. Default TRUE.}
 
 \item{background_N}{Integer; number of background genes for
-hypergeometric test (default 20000).}
+hypergeometric test (default: current DGIdb gene count).}
 }
 \value{
 Invisibly returns NULL

@@ -27,7 +27,7 @@ remotes::install_github("lfzhang00/DGIdbr")
 CSV 包含 `direction` 列（`up`/`down`）时**自动**触发 ChEMBL 方向一致性评分。
 
 ```r
-# 分组模式：CSV 需包含 gene, direction 列
+# 分组模式：gene 为必填列，direction 可选
 DGIdbr(mode = "group", base_tables = ".", group_filename = "group.csv",
        base_out = ".", approve = TRUE, enrichment = TRUE)
 
@@ -38,6 +38,11 @@ DGIdbr(mode = "subtype", base_tables = ".", subtype_filename = "subtype.csv",
 # 关闭富集，回退到计数模式
 DGIdbr(mode = "group", ..., enrichment = FALSE)
 ```
+
+分组 CSV 只有 `gene` 列时，结果写入 `dgidb_group/all`。提供 `direction` 后按
+`up` 和 `down` 分组。自动背景以 DGIdb 中匹配到的输入基因作为样本，指定
+`background_N` 时使用全部去重输入基因。自动背景查询失败时保留命中记录，富集统计量记为缺失。某药对同一基因的作用方向冲突时记为缺失。
+
 
 #### 输出文件 `dgidb_hits.csv`
 

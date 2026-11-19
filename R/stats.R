@@ -12,17 +12,18 @@
 # Fetched once from DGIdb per session.
 .cache_bg <- new.env(parent = emptyenv())
 
-#' Fetch the total number of druggable genes in DGIdb
+#' Fetch the total number of DGIdb gene records
 #'
 #' Queries the DGIdb genes connection for its \code{totalCount}. This is the
-#' correct background N for the hypergeometric test — genes that have at least
-#' one documented drug interaction.  Result is cached in memory for the session.
+#' background size for all registered genes, including those without
+#' a documented drug interaction.  Result is cached in memory for the session.
 #'
-#' @return Integer; number of unique genes with drug interactions in DGIdb.
+#' @return Integer; number of gene records in DGIdb.
 #' @keywords internal
 fetch_druggable_gene_count <- function() {
-  if (!is.null(.cache_bg$count)) {
-    return(.cache_bg$count)
+  service <- Sys.getenv("DGIDB_URL", endpoint)
+  if (!is.null(.cache_bg[[service]])) {
+    return(.cache_bg[[service]])
   }
 
   q <- "{ genes(first: 1) { totalCount } }"
@@ -32,16 +33,14 @@ fetch_druggable_gene_count <- function() {
       resp$status == 200 &&
       is.null(resp$errors) &&
       !is.null(resp$data$genes$totalCount)) {
-    .cache_bg$count <- as.integer(resp$data$genes$totalCount)
-    cat("DGIdb background gene count:", .cache_bg$count, "\n")
+    .cache_bg[[service]] <- as.integer(resp$data$genes$totalCount)
+    cat("DGIdb background gene count:", .cache_bg[[service]], "\n")
   } else {
-    # Fallback: reasonable estimate based on DGIdb v5 publications
-    .cache_bg$count <- 12000L
-    warning("Could not query DGIdb gene count; using fallback N = ",
-            .cache_bg$count)
+    warning("DGIdb background unavailable; enrichment statistics set to NA.", call. = FALSE)
+    return(NA_integer_)
   }
 
-  .cache_bg$count
+  .cache_bg[[service]]
 }
 
 #' Fetch total gene target counts for a list of drugs from DGIdb
@@ -55,76 +54,22 @@ fetch_druggable_gene_count <- function() {
 #' @return data.frame with columns: drug, drug_concept_id, total_targets
 #' @keywords internal
 fetch_drug_target_counts <- function(drug_names, chunk = 150) {
-  # Check cache first
-  cached <- mget(drug_names, envir = .cache_drug_targets, ifnotfound = NA)
-  cached_hits <- !is.na(cached)
-  if (all(cached_hits)) {
-    return(do.call(rbind, cached))
+  service <- Sys.getenv("DGIDB_URL", endpoint)
+  if (is.null(.cache_drug_targets[[service]])) {
+    .cache_drug_targets[[service]] <- new.env(parent = emptyenv())
   }
-
-  # Only query drugs not in cache
-  to_query <- drug_names[!cached_hits]
-  results <- list()
-
-  # Add cached results
-  for (nm in drug_names[cached_hits]) {
-    results[[length(results) + 1]] <- cached[[nm]]
-  }
-
-  n <- length(to_query)
-  if (n == 0) {
-    return(do.call(rbind, results))
-  }
-
-  for (i in seq(1, n, by = chunk)) {
-    sub <- to_query[i:min(i + chunk - 1, n)]
-    sub_arg <- paste(sprintf('"%s"', sub), collapse = ", ")
-
-    q <- sprintf(
-      '{
-        drugs(names: [%s]) {
-          nodes {
-            name
-            conceptId
-            interactions {
-              gene { name }
-            }
-          }
-        }
-      }',
-      sub_arg
-    )
-
-    resp <- tryCatch(run_gql(q, timeout_sec = 60), error = function(e) e)
-
-    if (inherits(resp, "error")) {
-      warning("fetch_drug_target_counts: request error for chunk starting at index ", i, ": ",
-              conditionMessage(resp))
-      next
-    }
-    if (resp$status != 200) {
-      warning("fetch_drug_target_counts: HTTP ", resp$status, " for chunk starting at index ", i)
-      next
-    }
-    if (!is.null(resp$errors)) {
-      warning("fetch_drug_target_counts: GraphQL errors for chunk starting at index ", i)
-      next
-    }
-
-    nd <- resp$data$drugs$nodes
-    if (is.null(nd)) next
-
-    # Normalise nodes to a list-of-lists
-    if (is.data.frame(nd)) {
-      nd <- lapply(seq_len(nrow(nd)), function(j) {
-        list(
-          name       = nd$name[[j]],
-          conceptId  = nd$conceptId[[j]],
-          interactions = nd$interactions[[j]]
-        )
-      })
-    }
-
+  cache <- .cache_drug_targets[[service]]
+  drug_names <- unique(drug_names)
+  cached <- intersect(drug_names, ls(cache, all.names = TRUE))
+  results <- mget(cached, envir = cache)
+  to_query <- setdiff(drug_names, cached)
+  for (batch in split(to_query, ceiling(seq_along(to_query) / chunk))) {
+    nd <- tryCatch(dgidb_named_nodes("drugs", batch, "name conceptId interactions { gene { name } }",
+                                     timeout_sec = 60),
+                   error = function(e) {
+                     warning("Cannot fetch target counts: ", conditionMessage(e), call. = FALSE)
+                     list()
+                   })
     for (d in nd) {
       inters <- d$interactions
       gene_names <- character(0)
@@ -164,7 +109,7 @@ fetch_drug_target_counts <- function(drug_names, chunk = 150) {
       )
 
       # Store in cache
-      .cache_drug_targets[[d$name]] <- entry
+      cache[[d$name]] <- entry
 
       results[[length(results) + 1]] <- entry
     }
@@ -183,7 +128,7 @@ fetch_drug_target_counts <- function(drug_names, chunk = 150) {
 #'   `gene_count` and `total_targets` columns.
 #' @param n_genes_input Integer; number of genes in the input gene set.
 #' @param background_N Integer or NULL; total background gene count. If NULL
-#'   (default), automatically queries DGIdb for the number of druggable genes.
+#'   (default), automatically queries DGIdb for the number of DGIdb gene records.
 #'   Set an explicit integer to override.
 #' @return The same data.frame with additional columns:
 #'   enrichment_ratio, p_value, fdr, significance
@@ -199,26 +144,34 @@ compute_drug_enrichment <- function(agg, n_genes_input, background_N = NULL) {
   # Resolve background N
   if (is.null(background_N)) {
     background_N <- fetch_druggable_gene_count()
+    if (is.na(background_N)) {
+      agg$enrichment_ratio <- agg$p_value <- agg$fdr <- NA_real_
+      agg$significance <- NA_character_
+      return(agg)
+    }
   }
 
   k <- agg$gene_count          # genes from input set that interact with this drug
   m <- agg$total_targets       # total genes this drug targets in DGIdb
 
-  # Enrichment ratio: (k/n) / (m/N)
-  #  > 1 = drug's targets are over-represented in the input gene set
-  agg$enrichment_ratio <- (k / n_genes_input) / (m / background_N)
-
-  # Hypergeometric test: P(X >= k)
-  #   phyper(k-1, m, N-m, n, lower.tail = FALSE)
-  agg$p_value <- mapply(
-    function(k_i, m_i) {
-      if (is.na(m_i) || m_i <= 0 || k_i <= 0)
-        return(NA_real_)
-      stats::phyper(k_i - 1, m_i, background_N - m_i, n_genes_input,
-                    lower.tail = FALSE)
-    },
-    k_i = k, m_i = m
-  )
+  for (size in list(background_N, n_genes_input)) {
+    if (length(size) != 1L || !is.numeric(size) || !is.finite(size) ||
+        size <= 0 || size != floor(size)) {
+      stop("Sample and background sizes must be positive whole numbers.", call. = FALSE)
+    }
+  }
+  if (n_genes_input > background_N) stop("Sample exceeds background size.", call. = FALSE)
+  valid <- is.finite(k) & is.finite(m) & k == floor(k) & m == floor(m) &
+    k > 0 & k <= pmin(n_genes_input, m) & m <= background_N &
+    n_genes_input - k <= background_N - m
+  if (any(!valid & !is.na(m))) {
+    warning("Incompatible overlap or target counts; affected statistics set to NA.", call. = FALSE)
+  }
+  agg$enrichment_ratio <- NA_real_
+  agg$p_value <- NA_real_
+  agg$enrichment_ratio[valid] <- (k[valid] / n_genes_input) / (m[valid] / background_N)
+  agg$p_value[valid] <- stats::phyper(k[valid] - 1, m[valid], background_N - m[valid],
+                                    n_genes_input, lower.tail = FALSE)
 
   # Benjamini-Hochberg FDR correction
   agg$fdr <- stats::p.adjust(agg$p_value, method = "BH")

@@ -19,7 +19,7 @@ build_gene_sets(
 
 \item{base_out}{Output base directory}
 
-\item{group_filename}{Case-control file name (needs gene/direction)}
+\item{group_filename}{Case-control file name (requires gene; direction is optional)}
 
 \item{subtype_filename}{Subtype file name (needs gene/direction/subtype)}
 }
