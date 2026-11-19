@@ -127,3 +127,69 @@ test_that("background failure preserves hits and can recover in the same session
   second <- compute_drug_enrichment(agg, 2L)
   expect_equal(second$p_value, stats::phyper(0,4,97,2,lower.tail=FALSE))
 })
+
+test_that("drug target caching keeps every concept id for a repeated name", {
+  cache <- DGIdbr:::.cache_drug_targets
+  rm(list = ls(envir = cache, all.names = TRUE), envir = cache)
+  nodes <- list(
+    list(name = "SURAMIN", conceptId = "rxcui:10256",
+         interactions = list(list(gene = list(name = "SIRT5")))),
+    list(name = "SURAMIN", conceptId = "chembl:CHEMBL265502",
+         interactions = list(list(gene = list(name = "SIRT5"))))
+  )
+  local_mocked_bindings(dgidb_named_nodes = function(...) nodes)
+  first <- fetch_drug_target_counts("SURAMIN")
+  second <- fetch_drug_target_counts("SURAMIN")
+  for (x in list(first, second)) {
+    expect_equal(nrow(unique(x[, c("drug", "drug_concept_id")])), 2L)
+    expect_setequal(x$total_targets, 1L)
+  }
+})
+
+test_that("unusable direction values warn and are visible in the sets", {
+  d <- tempfile()
+  dir.create(d)
+  write.csv(data.frame(gene = c("SIRT5", "TFAM", "MYC"),
+                       direction = c("upregulated", "down", "")),
+            file.path(d, "group.csv"), row.names = FALSE)
+  msgs <- character()
+  sets <- withCallingHandlers(build_gene_sets("group", d, d),
+                              warning = function(w) {
+                                msgs <<- c(msgs, conditionMessage(w))
+                                invokeRestart("muffleWarning")
+                              })
+  expect_true(any(grepl("not 'up' or 'down'", msgs)))
+  expect_true(any(grepl("empty direction", msgs)))
+  expect_length(sets[[1]]$genes, 0L)
+  expect_identical(sets[[2]]$genes, "TFAM")
+})
+
+test_that("unsafe subtype names cannot leave the subtype output directory", {
+  d <- tempfile()
+  dir.create(d)
+  write.csv(data.frame(gene = c("SIRT5", "TFAM"),
+                       direction = c("up", "down"),
+                       subtype = c("..", "a/b")),
+            file.path(d, "subtype.csv"), row.names = FALSE)
+  msgs <- character()
+  sets <- withCallingHandlers(build_gene_sets("subtype", d, d),
+                              warning = function(w) {
+                                msgs <<- c(msgs, conditionMessage(w))
+                                invokeRestart("muffleWarning")
+                              })
+  outs <- vapply(sets, `[[`, "", "out")
+  expect_true(length(outs) >= 2L)
+  expect_true(all(startsWith(outs, file.path(d, "dgidb_subtype"))))
+  expect_false(any(grepl("..", basename(dirname(outs)), fixed = TRUE)))
+  expect_true(any(grepl("unsafe in a directory name", msgs)))
+})
+
+test_that("drugs without a target count are reported", {
+  agg <- data.frame(drug = c("A", "B"), gene_count = c(1L, 1L), total_targets = c(3L, NA))
+  expect_warning(compute_drug_enrichment(agg, 2L, background_N = 100), "no target count")
+})
+
+test_that("CHEMBL number forms are normalised to one molecule id", {
+  ids <- chembl_map_drug_to_molecule(c("CHEMBL:999", "CHEMBL999", "CHEMBL:CHEMBL999"))
+  expect_identical(unname(unlist(ids)), rep("CHEMBL999", 3L))
+})

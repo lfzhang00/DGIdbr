@@ -5,7 +5,7 @@
 # DGIdbr
 
 [![R CMD check](https://github.com/lfzhang00/DGIdbr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/lfzhang00/DGIdbr/actions)
-[![Version](https://img.shields.io/badge/version-1.3.2-blue)](https://github.com/lfzhang00/DGIdbr/releases/tag/1.3.2)
+[![Version](https://img.shields.io/badge/version-1.3.3-blue)](https://github.com/lfzhang00/DGIdbr/releases/tag/1.3.3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 查询 DGIdb 药物-基因互作数据库，通过超几何富集检验对药物排序。
@@ -14,13 +14,13 @@
 ## 安装
 
 ```r
-remotes::install_github("lfzhang00/DGIdbr", ref = "1.3.2")
+remotes::install_github("lfzhang00/DGIdbr", ref = "1.3.3")
 library(DGIdbr)
 ```
 
 > 注意：原仓库 `lancelotzhang0124/DGIdbr` 已归档，不再维护。
 
-## 如何判断 1.3.2 的查询结果
+## 如何判断 1.3.3 的查询结果
 
 ```r
 run_gene_set("SIRT5", "SIRT5", out_dir = "sirt5", approve = FALSE, enrichment = FALSE)
@@ -30,6 +30,7 @@ read.csv("sirt5/dgidb_raw.csv")[c("drug", "interaction_types", "approved")]
 - 主查询遇到 DNS、HTTP、GraphQL 或 JSON 解析错误时会向 R 调用方报错，不会将失败写成零命中。批处理会继续其他基因集，最后汇总失败项。建议每次使用新输出目录：失败不会删除旧结果。
 - 查询成功但没有互作时，两张 CSV 都只有表头。`dgidb_raw.csv` 保留全部互作和数据库报告的类型（如 `inhibitor`）；`approve = TRUE` 只筛选 `dgidb_hits.csv`，仅保留 DGIdb 明确标记 `approved = TRUE` 的药物。因此，原始表非空但汇总表为空，也可能是有效筛选结果。
 - DGIdb 每批最多查询 100 个名称，临时错误最多重试两次。每次请求默认超时 120 秒，可用 `options(DGIdbr.timeout = 180)` 调整。ChEMBL 机制查询按返回的 `next` 链接翻页，未取完的批次不会缓存为完整结果。
+- `DGIdbr()` 和 `run_gene_set()` 可在同一会话中运行多个基因集；药物靶点数按返回的 concept ID 缓存，统计结果不依赖基因集的执行顺序。
 - 启用方向评分时，两张 CSV 在 ChEMBL 评分前写出，完成后更新。设 `direction = FALSE` 可跳过评分，同时保留上下调分组。
 
 ## 函数说明
@@ -59,11 +60,16 @@ DGIdbr(mode = "group", ..., enrichment = FALSE)
 
 #### 输出文件 `dgidb_hits.csv`
 
+每种药物与 concept id 一行，只包含至少有一条互作的药物。
+
 | 列名 | 说明 |
 |------|------|
-| `drug`, `gene_count`, `total_targets`, `total_score` | 基本统计 |
-| `enrichment_ratio`, `p_value`, `fdr`, `significance` | 富集检验 |
-| `n_with_direction_data`, `n_direction_consistent`, `direction_ratio` | ChEMBL 方向评分（CSV 有 direction 列时自动添加）|
+| `drug`、`drug_concept_id`、`key`、`approved` | 药物标识：名称、concept id、`drug|concept_id` 键、DGIdb 批准标记 |
+| `gene_count`、`total_score`、`max_score`、`genes`、`sources` | 命中统计：命中基因数、互作分总和、最高分、命中基因、来源数据库 |
+| `enrichment_ratio`、`p_value`、`fdr`、`significance` | 超几何富集（`enrichment = TRUE` 时加入） |
+| `n_with_direction_data`、`n_direction_consistent`、`direction_ratio` | ChEMBL 方向评分（输入含 `direction` 且 `direction = TRUE` 时加入） |
+
+列集合随选项变化：9 个基础列，加 4 个富集列、3 个方向列。查询成功但无互作时，只写表头且仅含 9 个基础列。
 
 #### 参数
 
@@ -85,7 +91,7 @@ DGIdbr(mode = "group", ..., enrichment = FALSE)
 
 ```r
 card <- drug_card("ASPIRIN")
-card$target_genes           # 基因符号（如 PTGS2）
+card$target_genes           # 基因符号；靶点为复合物时为 NA
 card$mechanisms$action_type # 如 "INHIBITOR"
 card$indications$disease    # 适应症名称
 
@@ -107,14 +113,14 @@ drug_card("ASPIRIN", phase = "trial")       # 仅试验中
 
 ## 引用
 
-L. Zhang (2026). *DGIdbr: DGIdb gene set query helper.* R package version 1.3.2. https://github.com/lfzhang00/DGIdbr
+L. Zhang (2026). *DGIdbr: DGIdb gene set query helper.* R package version 1.3.3. https://github.com/lfzhang00/DGIdbr
 
 ```bibtex
 @manual{DGIdbr,
   author = {Zhang, L.},
   title  = {DGIdbr: DGIdb gene set query helper},
   year   = {2026},
-  version = {1.3.2},
+  version = {1.3.3},
   url    = {https://github.com/lfzhang00/DGIdbr}
 }
 ```

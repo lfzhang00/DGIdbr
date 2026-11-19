@@ -59,8 +59,9 @@ chembl_map_drug_to_molecule <- function(drug_names, chunk = 20) {
   to_query <- character(0)
   for (nm in drug_names) {
     id <- toupper(trimws(nm))
-    if (grepl("^(CHEMBL:)?CHEMBL[0-9]+$", id)) {
-      out[[nm]] <- sub("^CHEMBL:", "", id)
+    if (grepl("^(CHEMBL[0-9]+|CHEMBL:CHEMBL[0-9]+|CHEMBL:[0-9]+)$", id)) {
+      digits <- sub("^\\D*", "", sub("^CHEMBL:(CHEMBL)?", "", id))
+      out[[nm]] <- paste0("CHEMBL", digits)
     } else if (exists(nm, envir = .cache_mol_id, inherits = FALSE)) {
       out[[nm]] <- .cache_mol_id[[nm]]
     } else {
@@ -559,12 +560,16 @@ chembl_fetch_indications <- function(mol_id, max_results = 50) {
                 "?molecule_chembl_id=", utils::URLencode(mol_id, reserved = TRUE),
                 "&limit=", max_results)
 
+  resp <- tryCatch(httr::GET(url, httr::timeout(20)), error = function(e) NULL)
+  if (is.null(resp) || httr::http_error(resp)) {
+    warning("ChEMBL indications unavailable",
+            if (!is.null(resp)) paste0(" (HTTP ", httr::status_code(resp), ")") else " (network error)",
+            "; no indication data.", call. = FALSE)
+    return(data.frame())
+  }
   doc <- tryCatch(
-    jsonlite::fromJSON(
-      httr::content(httr::GET(url, httr::timeout(20)),
-                     "text", encoding = "UTF-8"),
-      simplifyVector = TRUE
-    ),
+    jsonlite::fromJSON(httr::content(resp, "text", encoding = "UTF-8"),
+                       simplifyVector = TRUE),
     error = function(e) NULL
   )
 
@@ -641,18 +646,26 @@ drug_card <- function(drug_name, phase = c("all", "approved", "trial")) {
   mol_id <- mol_map[[drug_name]]
 
   if (is.null(mol_id)) {
+    probe <- tryCatch(httr::GET(paste0(CHEMBL_API_BASE, "/molecule.json"),
+                                query = list(pref_name__iexact = drug_name, limit = 1),
+                                httr::timeout(15)), error = function(e) NULL)
+    if (!is.null(probe) && httr::http_error(probe)) {
+      stop("ChEMBL lookup failed (HTTP ", httr::status_code(probe), ").", call. = FALSE)
+    }
     cat("  x Drug '", drug_name_orig, "' not found in ChEMBL.\n", sep = "")
     return(invisible(NULL))
   }
 
   # ---- Step 2: molecule info ----
   url <- paste0(CHEMBL_API_BASE, "/molecule/", mol_id, ".json")
+  resp <- tryCatch(httr::GET(url, httr::timeout(15)), error = function(e) NULL)
+  if (is.null(resp) || httr::http_error(resp)) {
+    stop("ChEMBL molecule lookup failed",
+         if (!is.null(resp)) paste0(" (HTTP ", httr::status_code(resp), ")") else " (network error)",
+         ".", call. = FALSE)
+  }
   doc <- tryCatch(
-    jsonlite::fromJSON(
-      httr::content(httr::GET(url, httr::timeout(15)),
-                     "text", encoding = "UTF-8"),
-      simplifyVector = TRUE
-    ),
+    jsonlite::fromJSON(httr::content(resp, "text", encoding = "UTF-8"), simplifyVector = TRUE),
     error = function(e) NULL
   )
 

@@ -29,13 +29,14 @@ test_that("known approval and nested types survive API parsing", {
          interactionScore = 1, sources = list(list(sourceDbName = "DTC")))
   }
   interactions <- list(drug("A", TRUE, c("inhibitor", "binder")),
-                       drug("B", FALSE, "inhibitor"), drug("C", NULL, character()))
+                       drug("B", FALSE, "inhibitor"))
   node <- list(name = "SIRT5", interactions = interactions)
   json <- jsonlite::toJSON(list(data = list(genes = list(nodes = list(node)))),
                            auto_unbox = TRUE, null = "null")
+  reply <- response(as.character(json))
   local_mocked_bindings(POST = function(url, body, ...) {
     expect_match(body$query, "conceptId approved")
-    response(as.character(json))
+    reply
   }, .package = "httr")
   for (approved_only in c(TRUE, FALSE)) {
     out <- tempfile()
@@ -43,8 +44,20 @@ test_that("known approval and nested types survive API parsing", {
     raw <- read.csv(file.path(out, "dgidb_raw.csv"))
     hits <- read.csv(file.path(out, "dgidb_hits.csv"))
     expect_identical(raw$interaction_types[1:2], c("inhibitor;binder", "inhibitor"))
-    expect_setequal(hits$drug, if (approved_only) "A" else c("A", "B", "C"))
+    expect_setequal(hits$drug, if (approved_only) "A" else c("A", "B"))
   }
+
+  # An explicit null approval is unknown rather than "not approved": approving
+  # must not silently drop the drug.
+  node_null <- list(name = "SIRT5", interactions = list(drug("C", NULL, character())))
+  reply <- response(as.character(jsonlite::toJSON(
+    list(data = list(genes = list(nodes = list(node_null)))),
+    auto_unbox = TRUE, null = "null")))
+  null_out <- tempfile()
+  expect_error(run_gene_set("sample", "SIRT5", null_out, approve = TRUE, enrichment = FALSE),
+               "missing drug approval value")
+  run_gene_set("sample", "SIRT5", null_out, approve = FALSE, enrichment = FALSE)
+  expect_true(is.na(read.csv(file.path(null_out, "dgidb_raw.csv"))$approved))
 })
 
 test_that("approval filtering rejects non-boolean inputs and server flags", {

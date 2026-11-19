@@ -1,3 +1,43 @@
+# DGIdbr 1.3.3
+
+## Behaviour changes
+
+* Enrichment statistics no longer turn into `NA` when several gene sets run in
+  one session. Drug target counts were cached per drug name, but one name can
+  map to several concept IDs (salt forms, source-specific identifiers); the
+  cached path kept a single ID and every later set merged by
+  `(drug, drug_concept_id)` against an incomplete table. In the bundled
+  `group.csv` example this left `total_targets`, `p_value` and `fdr` as `NA` for
+  86 of 2078 down-regulated hits when the up set ran first. Cached counts are
+  now stored per returned concept ID.
+* An unusable `direction` value (anything other than `up`/`down`, including an
+  empty cell) now raises a warning that names the value and counts the unused
+  rows. Before, those rows were dropped silently and the set could run with zero
+  genes and no message other than `no genes, skipped.`.
+* A subtype value is sanitised before it becomes an output directory (for
+  example `..` or `a/b`), with a warning when the name changes; such values can
+  no longer write outside `dgidb_subtype/`. Rows with an empty subtype are
+  reported instead of being dropped silently.
+* `approve = TRUE` errors when DGIdb returns a null approval value instead of
+  silently treating the drug as unapproved.
+* Drugs whose target count is missing are reported with a warning; their
+  enrichment statistics stay `NA` instead of disappearing from the message log.
+* `drug_card()` errors when the ChEMBL lookup itself fails (HTTP error or
+  network error) instead of reporting the drug as "not found"; a failed
+  indication request is reported as unavailable rather than as "no indication
+  data".
+
+## Fixes
+
+* Duplicate `(drug, drug_concept_id)` rows returned by the target lookup are
+  dropped before the merge, so a drug that DGIdb reports twice under one name no
+  longer appears twice in `dgidb_hits.csv`.
+* `drug_card()` accepts `CHEMBL:999` and `CHEMBL:CHEMBL999` as well as
+  `CHEMBL999`.
+* README and README_zh describe the real `dgidb_hits.csv` column set (9 base
+  columns, 4 enrichment columns when `enrichment = TRUE`, 3 direction columns
+  when scoring runs) and note that `target_genes` is `NA` for complex targets.
+
 # DGIdbr 1.3.2
 
 ## Behaviour changes

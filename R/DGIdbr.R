@@ -164,6 +164,9 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE,
         if (length(approval) && (!is.logical(approval) || length(approval) != 1L)) {
           stop(label, ": invalid drug approval field", call. = FALSE)
         }
+        if (isTRUE(approve) && length(approval) && is.na(approval)) {
+          stop(label, ": missing drug approval value", call. = FALSE)
+        }
         rows[[length(rows) + 1]] <- data.frame(
           gene = g$name,
           drug = it$drug$name,
@@ -290,6 +293,39 @@ write_result_tables <- function(hits, raw, hits_path, raw_path) {
   invisible(NULL)
 }
 
+#' Warn about direction values that cannot be used
+#' @keywords internal
+warn_unrecognised_direction <- function(direction, where) {
+  values <- tolower(trimws(direction))
+  known <- values %in% c("up", "down")
+  blank <- is.na(values) | !nzchar(values)
+  if (any(blank)) {
+    warning(sprintf("%s: %d row(s) have an empty direction and are not used.",
+                    where, sum(blank)), call. = FALSE)
+  }
+  unknown <- unique(values[!known & !blank])
+  if (length(unknown)) {
+    warning(sprintf("%s: direction value(s) %s are not 'up' or 'down'; %d row(s) are not used.",
+                    where, paste0("'", sort(unknown), "'", collapse = ", "),
+                    sum(!known & !blank)), call. = FALSE)
+  }
+  invisible(NULL)
+}
+
+#' Make a value usable as one path component
+#' @keywords internal
+safe_path_component <- function(value, what) {
+  raw <- tolower(trimws(value))
+  safe <- gsub("[^a-z0-9._-]+", "_", raw)
+  safe <- gsub("^\\.+", "_", safe)
+  if (!nzchar(safe)) safe <- "unknown"
+  if (!identical(safe, raw)) {
+    warning(sprintf("%s '%s' contains characters that are unsafe in a directory name; using '%s'.",
+                    what, value, safe), call. = FALSE)
+  }
+  safe
+}
+
 #' Read genes from CSV, optionally filtered by direction
 #' @keywords internal
 read_genes_with_dir <- function(file, direction_value = NULL) {
@@ -328,7 +364,12 @@ build_gene_sets <- function(mode = c("group", "subtype"),
     group_file <- file.path(base_tables, group_filename)
     if (file.exists(group_file)) {
       df_all <- utils::read.csv(group_file, stringsAsFactors = FALSE)
-      directions <- if ("direction" %in% names(df_all)) c("up", "down") else "all"
+      if ("direction" %in% names(df_all)) {
+        warn_unrecognised_direction(df_all$direction, basename(group_file))
+        directions <- c("up", "down")
+      } else {
+        directions <- "all"
+      }
       gene_sets <- lapply(directions, function(dir) {
         genes <- read_genes_with_dir(df_all, dir)
         list(label = paste0("group_", dir), genes = genes,
@@ -355,6 +396,12 @@ build_gene_sets <- function(mode = c("group", "subtype"),
   }
   df_sub$direction <- tolower(trimws(df_sub$direction))
   df_sub$subtype <- trimws(as.character(df_sub$subtype))
+  warn_unrecognised_direction(df_sub$direction, basename(subtype_file))
+  dropped <- is.na(df_sub$subtype) | !nzchar(df_sub$subtype)
+  if (any(dropped)) {
+    warning(sprintf("%s: %d row(s) have an empty subtype and are not used.",
+                    basename(subtype_file), sum(dropped)), call. = FALSE)
+  }
 
   subtypes <- sort(unique(df_sub$subtype[!is.na(df_sub$subtype) & nzchar(df_sub$subtype)]))
   if (length(subtypes) == 0) {
@@ -362,6 +409,8 @@ build_gene_sets <- function(mode = c("group", "subtype"),
     return(gene_sets)
   }
 
+  subtype_dirs <- vapply(subtypes, safe_path_component, character(1), what = "subtype")
+  names(subtype_dirs) <- subtypes
   for (st in subtypes) {
     sub_df <- df_sub[df_sub$subtype == st, ]
     for (dirv in c("up", "down")) {
@@ -369,10 +418,10 @@ build_gene_sets <- function(mode = c("group", "subtype"),
       if (length(genes) == 0) next
       gd_vec <- stats::setNames(rep(dirv, length(genes)), genes)
       gene_sets[[length(gene_sets) + 1]] <- list(
-        label = sprintf("subtype_%s_%s", tolower(st), dirv),
+        label = sprintf("subtype_%s_%s", subtype_dirs[[st]], dirv),
         genes = genes,
         gene_direction = gd_vec,
-        out   = file.path(base_out, "dgidb_subtype", tolower(st), dirv)
+        out   = file.path(base_out, "dgidb_subtype", subtype_dirs[[st]], dirv)
       )
     }
   }

@@ -5,7 +5,7 @@
 # DGIdbr
 
 [![R CMD check](https://github.com/lfzhang00/DGIdbr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/lfzhang00/DGIdbr/actions)
-[![Version](https://img.shields.io/badge/version-1.3.2-blue)](https://github.com/lfzhang00/DGIdbr/releases/tag/1.3.2)
+[![Version](https://img.shields.io/badge/version-1.3.3-blue)](https://github.com/lfzhang00/DGIdbr/releases/tag/1.3.3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 Query DGIdb drug-gene interactions and rank drugs by hypergeometric enrichment.
@@ -15,13 +15,13 @@ clinical indications.
 ## Installation
 
 ```r
-remotes::install_github("lfzhang00/DGIdbr", ref = "1.3.2")
+remotes::install_github("lfzhang00/DGIdbr", ref = "1.3.3")
 library(DGIdbr)
 ```
 
 > Note: the legacy repository `lancelotzhang0124/DGIdbr` is archived and no longer maintained.
 
-## Reading results in 1.3.2
+## Reading results in 1.3.3
 
 ```r
 run_gene_set("SIRT5", "SIRT5", out_dir = "sirt5", approve = FALSE, enrichment = FALSE)
@@ -31,6 +31,7 @@ read.csv("sirt5/dgidb_raw.csv")[c("drug", "interaction_types", "approved")]
 - A failed primary query (DNS, HTTP, GraphQL, or invalid JSON) raises an R error, not an empty result. Batch runs identify failed sets after processing the others. Use a fresh output directory: a failed query does not remove files from earlier runs.
 - A successful query with no interactions writes two header-only CSVs. `dgidb_raw.csv` retains all interactions and their reported types (e.g., `inhibitor`); `approve = TRUE` filters only `dgidb_hits.csv`, keeping explicit DGIdb `approved = TRUE` values. An empty hits table with a nonempty raw table can therefore be a valid filter result.
 - DGIdb reads use batches of up to 100 names and retry transient failures up to twice. Set `options(DGIdbr.timeout = 180)` to override the default 120 seconds per attempt. ChEMBL mechanism queries follow the returned `next` link; incomplete batches are not cached as complete.
+- `DGIdbr()` and `run_gene_set()` can run several sets in one session; drug target counts are cached per returned concept ID, so statistics do not depend on the order of the sets.
 - With direction scoring enabled, both CSVs are written before ChEMBL scoring and updated afterward. Set `direction = FALSE` to skip scoring without changing the up/down groups.
 
 ## Functions
@@ -63,11 +64,18 @@ ChEMBL action directions for a drug–gene pair are reported as missing.
 
 #### Output: `dgidb_hits.csv`
 
+One row per drug and concept id with at least one matching interaction.
+
 | Column | Description |
 |--------|-------------|
-| `drug`, `gene_count`, `total_targets`, `total_score` | Basic stats |
-| `enrichment_ratio`, `p_value`, `fdr`, `significance` | Enrichment test |
-| `n_with_direction_data`, `n_direction_consistent`, `direction_ratio` | ChEMBL direction scoring (auto-added when CSV has `direction`) |
+| `drug`, `drug_concept_id`, `key`, `approved` | Drug identity: name, concept id, `drug|concept_id` key, and DGIdb approval flag |
+| `gene_count`, `total_score`, `max_score`, `genes`, `sources` | Hit statistics: matched genes, summed interaction score, best score, gene symbols, source databases |
+| `enrichment_ratio`, `p_value`, `fdr`, `significance` | Hypergeometric enrichment (added when `enrichment = TRUE`) |
+| `n_with_direction_data`, `n_direction_consistent`, `direction_ratio` | ChEMBL direction scoring (added when the CSV has `direction` and `direction = TRUE`) |
+
+The column set follows the options: 9 identity and hit columns plus 4 enrichment
+columns and 3 direction columns. A successful query with no interactions writes a
+header-only file with the 9 base columns.
 
 #### Parameters
 
@@ -89,7 +97,7 @@ Search any drug name for its targets, mechanism, and indications.
 
 ```r
 card <- drug_card("ASPIRIN")
-card$target_genes           # gene symbols (e.g. PTGS2)
+card$target_genes           # gene symbols; NA when the ChEMBL target is a complex
 card$mechanisms$action_type # e.g. "INHIBITOR"
 card$indications$disease    # condition names
 
@@ -111,14 +119,14 @@ drug_card("ASPIRIN", phase = "trial")       # investigational only
 
 ## Citation
 
-L. Zhang (2026). *DGIdbr: DGIdb gene set query helper.* R package version 1.3.2. https://github.com/lfzhang00/DGIdbr
+L. Zhang (2026). *DGIdbr: DGIdb gene set query helper.* R package version 1.3.3. https://github.com/lfzhang00/DGIdbr
 
 ```bibtex
 @manual{DGIdbr,
   author = {Zhang, L.},
   title  = {DGIdbr: DGIdb gene set query helper},
   year   = {2026},
-  version = {1.3.2},
+  version = {1.3.3},
   url    = {https://github.com/lfzhang00/DGIdbr}
 }
 ```

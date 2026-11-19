@@ -61,7 +61,8 @@ fetch_drug_target_counts <- function(drug_names, chunk = 150) {
   cache <- .cache_drug_targets[[service]]
   drug_names <- unique(drug_names)
   cached <- intersect(drug_names, ls(cache, all.names = TRUE))
-  results <- mget(cached, envir = cache)
+  results <- list()
+  for (nm in cached) results <- c(results, cache[[nm]])
   to_query <- setdiff(drug_names, cached)
   for (batch in split(to_query, ceiling(seq_along(to_query) / chunk))) {
     nd <- tryCatch(dgidb_named_nodes("drugs", batch, "name conceptId interactions { gene { name } }"),
@@ -107,15 +108,21 @@ fetch_drug_target_counts <- function(drug_names, chunk = 150) {
         stringsAsFactors = FALSE
       )
 
-      # Store in cache
-      cache[[d$name]] <- entry
+      # Store every node returned for this name: one name can carry several
+      # concept IDs (salt forms, source-specific IDs) and the merge downstream
+      # is by (drug, drug_concept_id), so keeping only one would silently drop
+      # the other pairs in later gene sets of the same session.
+      cache[[d$name]] <- c(cache[[d$name]], list(entry))
 
       results[[length(results) + 1]] <- entry
     }
   }
 
   if (length(results) == 0) return(NULL)
-  do.call(rbind, results)
+  out <- do.call(rbind, results)
+  out <- out[!duplicated(out[, c("drug", "drug_concept_id")]), , drop = FALSE]
+  rownames(out) <- NULL
+  out
 }
 
 #' Compute drug enrichment statistics
@@ -152,6 +159,11 @@ compute_drug_enrichment <- function(agg, n_genes_input, background_N = NULL) {
 
   k <- agg$gene_count          # genes from input set that interact with this drug
   m <- agg$total_targets       # total genes this drug targets in DGIdb
+
+  if (anyNA(m) || anyNA(k)) {
+    warning(sprintf("%d of %d drugs have no target count; their enrichment statistics are NA.",
+                    sum(is.na(m) | is.na(k)), length(m)), call. = FALSE)
+  }
 
   for (size in list(background_N, n_genes_input)) {
     if (length(size) != 1L || !is.numeric(size) || !is.finite(size) ||
