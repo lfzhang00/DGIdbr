@@ -9,7 +9,6 @@ Maintainer: L. Zhang <lingfeng.zhang2@mail.mcgill.ca>
 Description: Statistically grounded drug prioritisation from gene sets. Queries DGIdb via GraphQL and ranks drugs by hypergeometric enrichment with FDR correction — not by naïve hit counting.
 License: MIT + file LICENSE
 Encoding: UTF-8
-LazyData: true
 Imports:
     httr,
     jsonlite,
