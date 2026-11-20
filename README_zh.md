@@ -5,7 +5,7 @@
 # DGIdbr
 
 [![R CMD check](https://github.com/lfzhang00/DGIdbr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/lfzhang00/DGIdbr/actions)
-[![Version](https://img.shields.io/badge/version-1.3.3-blue)](https://github.com/lfzhang00/DGIdbr/releases/tag/1.3.3)
+[![Version](https://img.shields.io/badge/version-1.3.4-blue)](https://github.com/lfzhang00/DGIdbr/releases/tag/1.3.4)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 查询 DGIdb 药物-基因互作数据库，通过超几何富集检验对药物排序。
@@ -14,13 +14,15 @@
 ## 安装
 
 ```r
-remotes::install_github("lfzhang00/DGIdbr", ref = "1.3.3")
+remotes::install_github("lfzhang00/DGIdbr", ref = "1.3.4")
 library(DGIdbr)
 ```
 
 > 注意：原仓库 `lancelotzhang0124/DGIdbr` 已归档，不再维护。
 
-## 如何判断 1.3.3 的查询结果
+## 如何判断 1.3.4 的查询结果
+
+输入 CSV 不存在，或两个亚型标签会写入同一目录时，分析会报错并停止。若所有药物的靶点数均不可用，仍保留命中记录和富集列，缺失值记为 `NA` 并发出警告；无效的背景基因数不会缓存。
 
 ```r
 run_gene_set("SIRT5", "SIRT5", out_dir = "sirt5", approve = FALSE, enrichment = FALSE)
@@ -66,10 +68,10 @@ DGIdbr(mode = "group", ..., enrichment = FALSE)
 |------|------|
 | `drug`、`drug_concept_id`、`key`、`approved` | 药物标识：名称、concept id、`drug|concept_id` 键、DGIdb 批准标记 |
 | `gene_count`、`total_score`、`max_score`、`genes`、`sources` | 命中统计：命中基因数、互作分总和、最高分、命中基因、来源数据库 |
-| `enrichment_ratio`、`p_value`、`fdr`、`significance` | 超几何富集（`enrichment = TRUE` 时加入） |
+| `total_targets`、`enrichment_ratio`、`p_value`、`fdr`、`significance` | 超几何富集（`enrichment = TRUE` 时加入） |
 | `n_with_direction_data`、`n_direction_consistent`、`direction_ratio` | ChEMBL 方向评分（输入含 `direction` 且 `direction = TRUE` 时加入） |
 
-列集合随选项变化：9 个基础列，加 4 个富集列、3 个方向列。查询成功但无互作时，只写表头且仅含 9 个基础列。
+列集合随选项变化：9 个基础列，加 5 个富集列、3 个方向列。查询成功但无互作时，只写表头且仅含 9 个基础列。
 
 #### 参数
 
@@ -113,14 +115,14 @@ drug_card("ASPIRIN", phase = "trial")       # 仅试验中
 
 ## 引用
 
-L. Zhang (2026). *DGIdbr: DGIdb gene set query helper.* R package version 1.3.3. https://github.com/lfzhang00/DGIdbr
+L. Zhang (2026). *DGIdbr: DGIdb gene set query helper.* R package version 1.3.4. https://github.com/lfzhang00/DGIdbr
 
 ```bibtex
 @manual{DGIdbr,
   author = {Zhang, L.},
   title  = {DGIdbr: DGIdb gene set query helper},
   year   = {2026},
-  version = {1.3.3},
+  version = {1.3.4},
   url    = {https://github.com/lfzhang00/DGIdbr}
 }
 ```

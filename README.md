@@ -5,7 +5,7 @@
 # DGIdbr
 
 [![R CMD check](https://github.com/lfzhang00/DGIdbr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/lfzhang00/DGIdbr/actions)
-[![Version](https://img.shields.io/badge/version-1.3.3-blue)](https://github.com/lfzhang00/DGIdbr/releases/tag/1.3.3)
+[![Version](https://img.shields.io/badge/version-1.3.4-blue)](https://github.com/lfzhang00/DGIdbr/releases/tag/1.3.4)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 Query DGIdb drug-gene interactions and rank drugs by hypergeometric enrichment.
@@ -15,13 +15,15 @@ clinical indications.
 ## Installation
 
 ```r
-remotes::install_github("lfzhang00/DGIdbr", ref = "1.3.3")
+remotes::install_github("lfzhang00/DGIdbr", ref = "1.3.4")
 library(DGIdbr)
 ```
 
 > Note: the legacy repository `lancelotzhang0124/DGIdbr` is archived and no longer maintained.
 
-## Reading results in 1.3.3
+## Reading results in 1.3.4
+
+A missing input CSV or two subtype labels that map to the same output directory now stop the run. If all target counts are unavailable, hits remain in the table with a warning and missing enrichment values; invalid background counts are not cached.
 
 ```r
 run_gene_set("SIRT5", "SIRT5", out_dir = "sirt5", approve = FALSE, enrichment = FALSE)
@@ -70,10 +72,10 @@ One row per drug and concept id with at least one matching interaction.
 |--------|-------------|
 | `drug`, `drug_concept_id`, `key`, `approved` | Drug identity: name, concept id, `drug|concept_id` key, and DGIdb approval flag |
 | `gene_count`, `total_score`, `max_score`, `genes`, `sources` | Hit statistics: matched genes, summed interaction score, best score, gene symbols, source databases |
-| `enrichment_ratio`, `p_value`, `fdr`, `significance` | Hypergeometric enrichment (added when `enrichment = TRUE`) |
+| `total_targets`, `enrichment_ratio`, `p_value`, `fdr`, `significance` | Hypergeometric enrichment (added when `enrichment = TRUE`) |
 | `n_with_direction_data`, `n_direction_consistent`, `direction_ratio` | ChEMBL direction scoring (added when the CSV has `direction` and `direction = TRUE`) |
 
-The column set follows the options: 9 identity and hit columns plus 4 enrichment
+The column set follows the options: 9 identity and hit columns plus 5 enrichment
 columns and 3 direction columns. A successful query with no interactions writes a
 header-only file with the 9 base columns.
 
@@ -119,14 +121,14 @@ drug_card("ASPIRIN", phase = "trial")       # investigational only
 
 ## Citation
 
-L. Zhang (2026). *DGIdbr: DGIdb gene set query helper.* R package version 1.3.3. https://github.com/lfzhang00/DGIdbr
+L. Zhang (2026). *DGIdbr: DGIdb gene set query helper.* R package version 1.3.4. https://github.com/lfzhang00/DGIdbr
 
 ```bibtex
 @manual{DGIdbr,
   author = {Zhang, L.},
   title  = {DGIdbr: DGIdb gene set query helper},
   year   = {2026},
-  version = {1.3.3},
+  version = {1.3.4},
   url    = {https://github.com/lfzhang00/DGIdbr}
 }
 ```

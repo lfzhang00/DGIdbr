@@ -29,11 +29,11 @@ fetch_druggable_gene_count <- function() {
   q <- "{ genes(first: 1) { totalCount } }"
   resp <- tryCatch(run_gql(q), error = function(e) e)
 
-  if (!inherits(resp, "error") &&
-      resp$status == 200 &&
-      is.null(resp$errors) &&
-      !is.null(resp$data$genes$totalCount)) {
-    .cache_bg[[service]] <- as.integer(resp$data$genes$totalCount)
+  count <- if (!inherits(resp, "error") && identical(as.integer(resp$status), 200L) &&
+               is.null(resp$errors)) resp$data$genes$totalCount
+  if (is.numeric(count) && length(count) == 1L && is.finite(count) &&
+      count > 0 && count <= .Machine$integer.max && count == floor(count)) {
+    .cache_bg[[service]] <- as.integer(count)
     cat("DGIdb background gene count:", .cache_bg[[service]], "\n")
   } else {
     warning("DGIdb background unavailable; enrichment statistics set to NA.", call. = FALSE)

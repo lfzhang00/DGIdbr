@@ -1,3 +1,10 @@
+# DGIdbr 1.3.4
+
+* A missing group or subtype CSV now raises an error instead of returning successfully without results.
+* Distinct subtype labels that resolve to the same output directory are rejected before any gene set runs.
+* When target counts are unavailable for every hit, the hits table retains the drugs, target-count column and enrichment columns. Unavailable values are `NA` and a warning is issued.
+* Invalid background gene counts are no longer coerced to integers or cached. The next enrichment call can retry.
+
 # DGIdbr 1.3.3
 
 ## Behaviour changes

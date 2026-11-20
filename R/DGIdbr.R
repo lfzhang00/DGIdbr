@@ -243,7 +243,10 @@ run_gene_set <- function(label, genes, out_dir, approve = TRUE,
       agg <- agg[order(agg$fdr, -agg$enrichment_ratio, na.last = TRUE), ]
       cat("Enrichment done. Drugs with FDR < 0.05:", sum(agg$fdr < 0.05, na.rm = TRUE), "\n")
     } else {
-      cat("Enrichment skipped (could not fetch drug target counts).\n")
+      warning("DGIdb target counts unavailable; enrichment statistics set to NA.", call. = FALSE)
+      agg$total_targets <- NA_integer_
+      agg$enrichment_ratio <- agg$p_value <- agg$fdr <- NA_real_
+      agg$significance <- NA_character_
       agg <- agg[order(-agg$gene_count, -agg$total_score, -agg$max_score), ]
     }
   } else {
@@ -377,7 +380,7 @@ build_gene_sets <- function(mode = c("group", "subtype"),
              out = file.path(base_out, "dgidb_group", dir))
       })
     } else {
-      cat("Warning: group file not found at", group_file, "- skipping group sets.\n")
+      stop("Group file not found: ", group_file, call. = FALSE)
     }
     return(gene_sets)
   }
@@ -385,8 +388,7 @@ build_gene_sets <- function(mode = c("group", "subtype"),
   # subtype mode
   subtype_file <- file.path(base_tables, subtype_filename)
   if (!file.exists(subtype_file)) {
-    cat("Warning: subtype file not found at", subtype_file, "- no subtype sets built.\n")
-    return(gene_sets)
+    stop("Subtype file not found: ", subtype_file, call. = FALSE)
   }
 
   df_sub <- utils::read.csv(subtype_file, stringsAsFactors = FALSE)
@@ -411,6 +413,11 @@ build_gene_sets <- function(mode = c("group", "subtype"),
 
   subtype_dirs <- vapply(subtypes, safe_path_component, character(1), what = "subtype")
   names(subtype_dirs) <- subtypes
+  shared <- duplicated(subtype_dirs) | duplicated(subtype_dirs, fromLast = TRUE)
+  if (any(shared)) {
+    stop("Distinct subtype labels map to the same output directory: ",
+         paste(shQuote(subtypes[shared]), collapse = ", "), ". Rename the labels.", call. = FALSE)
+  }
   for (st in subtypes) {
     sub_df <- df_sub[df_sub$subtype == st, ]
     for (dirv in c("up", "down")) {
